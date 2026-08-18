@@ -41,7 +41,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
         app.delegate = delegate
+        delegate.setupMainMenu()
         app.run()
+    }
+
+    /// 设置主菜单（含「编辑」菜单）：accessory 应用虽不显示菜单栏，但快捷键
+    /// ⌘C/⌘V/⌘X/⌘A 依赖菜单项注册，缺失会导致文本框无法复制/粘贴。
+    private func setupMainMenu() {
+        let mainMenu = NSMenu()
+
+        // 应用菜单
+        let appItem = NSMenuItem()
+        mainMenu.addItem(appItem)
+        let appMenu = NSMenu(title: "APIMug")
+        appItem.submenu = appMenu
+        appMenu.addItem(withTitle: "关于 APIMug",
+                        action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+                        keyEquivalent: "")
+        appMenu.addItem(.separator())
+        appMenu.addItem(withTitle: "隐藏 APIMug", action: #selector(NSApplication.hide(_:)), keyEquivalent: "h")
+        appMenu.addItem(withTitle: "退出 APIMug", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+
+        // 编辑菜单（剪贴板快捷键）
+        let editItem = NSMenuItem()
+        mainMenu.addItem(editItem)
+        let editMenu = NSMenu(title: "编辑")
+        editItem.submenu = editMenu
+        editMenu.addItem(withTitle: "撤销", action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "重做", action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "剪切", action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "拷贝", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "粘贴", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "全选", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+
+        NSApp.mainMenu = mainMenu
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
