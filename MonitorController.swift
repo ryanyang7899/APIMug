@@ -6,12 +6,15 @@ final class MonitorController {
 
     private(set) var config: AppConfig
     private(set) var snapshots: [UUID: SiteSnapshot] = [:]
+    /// 每日用量历史：日期(yyyy-MM-dd) → 当天总用量
+    private(set) var dailyUsageHistory: [String: Double] = [:]
     private var timer: Timer?
     private var isRefreshing = false
 
     init(config: AppConfig) {
         self.config = config
         self.snapshots = ConfigStore.loadSnapshots()
+        self.dailyUsageHistory = ConfigStore.loadDailyUsage()
     }
 
     /// 启动：立即刷新一次 + 开启定时
@@ -70,7 +73,39 @@ final class MonitorController {
                 ConfigStore.saveSnapshots(snapshots)
             }
         }
+        updateDailyUsageHistory()
         onStateChange?()
+    }
+
+    /// 汇总今日用量并写入历史（折线图数据源）
+    private func updateDailyUsageHistory() {
+        let today = AppFormatters.day.string(from: Date())
+        let total = config.sites.filter { $0.enabled }.reduce(0.0) { sum, site in
+            guard let snap = snapshots[site.id], snap.ok else { return sum }
+            return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0))
+        }
+        dailyUsageHistory[today] = total
+        // 只保留最近 10 天，避免无限增长
+        let keys = dailyUsageHistory.keys.sorted()
+        if keys.count > 10 {
+            for k in keys.prefix(keys.count - 10) {
+                dailyUsageHistory.removeValue(forKey: k)
+            }
+        }
+        ConfigStore.saveDailyUsage(dailyUsageHistory)
+    }
+
+    /// 最近 n 天的每日用量（含今天，从旧到新），供折线图使用
+    func dailyUsageForLastDays(_ n: Int) -> [(day: String, value: Double)] {
+        let cal = Calendar.current
+        let today = Date()
+        var result: [(day: String, value: Double)] = []
+        for i in (0..<n).reversed() {
+            guard let d = cal.date(byAdding: .day, value: -i, to: today) else { continue }
+            let key = AppFormatters.day.string(from: d)
+            result.append((key, dailyUsageHistory[key] ?? 0))
+        }
+        return result
     }
 
     /// 低余额判定（仅 DeepSeek 有余额概念）

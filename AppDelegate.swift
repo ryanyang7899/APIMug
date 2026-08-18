@@ -77,6 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
+        // 近 7 日用量折线图（视图项，宽度与菜单对齐，高度紧凑）
+        let chartItem = NSMenuItem()
+        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7))
+        menu.addItem(chartItem)
+        menu.addItem(.separator())
+
         // 每站点两行：第一行 平台+余额；第二行 本日/本月/更新时间
         let enabledSites = controller.config.sites.filter { $0.enabled }
         if enabledSites.isEmpty {

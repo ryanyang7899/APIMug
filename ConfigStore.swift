@@ -96,4 +96,22 @@ enum ConfigStore {
         get { defaults.string(forKey: lastNotifiedVersionKey) }
         set { defaults.set(newValue, forKey: lastNotifiedVersionKey) }
     }
+
+    // MARK: - 每日用量历史（折线图）
+
+    static let dailyUsageKey = "dailyUsageHistory"
+
+    static func loadDailyUsage() -> [String: Double] {
+        guard let data = defaults.data(forKey: dailyUsageKey),
+              let dict = try? JSONDecoder().decode([String: Double].self, from: data) else {
+            return [:]
+        }
+        return dict
+    }
+
+    static func saveDailyUsage(_ dict: [String: Double]) {
+        if let data = try? JSONEncoder().encode(dict) {
+            defaults.set(data, forKey: dailyUsageKey)
+        }
+    }
 }

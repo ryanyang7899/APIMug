@@ -24,7 +24,7 @@ swiftc -O \
   -parse-as-library -swift-version 5 -target arm64-apple-macosx14.0 \
   -framework AppKit -framework UserNotifications \
   Models.swift ConfigStore.swift APIService.swift \
-  NotificationManager.swift MonitorController.swift SettingsWindow.swift AppDelegate.swift Updater.swift LoginItem.swift \
+  NotificationManager.swift MonitorController.swift SettingsWindow.swift AppDelegate.swift Updater.swift LoginItem.swift DailyUsageChartView.swift \
   -o "$BUNDLE/Contents/MacOS/$APP"
 
 echo "==> 写 Info.plist..."
