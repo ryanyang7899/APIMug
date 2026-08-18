@@ -77,9 +77,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 近 7 日用量折线图（视图项，宽度与菜单对齐，高度紧凑）
+        // 近 7 日用量折线图（视图项，宽度按菜单内容自适应，折线横向居中）
+        let chartWidth = max(menuContentWidth() + 28, 220)
         let chartItem = NSMenuItem()
-        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7))
+        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7), width: chartWidth)
         menu.addItem(chartItem)
         menu.addItem(.separator())
 
@@ -155,6 +156,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let lastTime = controller.snapshots.values.map { $0.checkedAt }.max()
             .map { AppFormatters.time.string(from: $0) } ?? "—"
         return (status, "上次检查 \(lastTime)")
+    }
+
+    /// 菜单内容中最宽的一行的渲染宽度（用于让折线图与菜单等宽、横向居中）
+    private func menuContentWidth() -> CGFloat {
+        var w: CGFloat = 0
+        let h = headerLines()
+        w = max(w, (h.0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
+        w = max(w, (h.1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width)
+        for site in controller.config.sites where site.enabled {
+            w = max(w, siteRowAttributedTitle(site: site).size().width)
+        }
+        w = max(w, ("版本 v\(Updater.installedVersion())" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width)
+        return w
     }
 
     /// 两行富文本：第一行平台+余额（中粗），第二行本日/本月/更新时间（小号次级色）
