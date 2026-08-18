@@ -26,6 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if args.count >= 2, args[1] == "--update" {
             CLI.runUpdateCheck(simulatedVersion: args.count >= 3 ? args[2] : nil)
         }
+        if args.count >= 3, args[1] == "--loginitem" {
+            CLI.runLoginItem(args[2])   // status / on / off
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
@@ -361,5 +364,23 @@ enum CLI {
         }
         sem.wait()
         fatalError("unreachable")
+    }
+
+    /// 开机自启动自测：--loginitem status|on|off
+    static func runLoginItem(_ action: String) -> Never {
+        print("当前状态: \(LoginItem.isEnabled ? "已开启" : "未开启")")
+        do {
+            if action == "on" {
+                try LoginItem.setEnabled(true)
+                print("已开启开机自启动")
+            } else if action == "off" {
+                try LoginItem.setEnabled(false)
+                print("已关闭开机自启动")
+            }
+        } catch {
+            print("ERROR: \(error)")
+        }
+        print("操作后状态: \(LoginItem.isEnabled ? "已开启" : "未开启")")
+        exit(0)
     }
 }

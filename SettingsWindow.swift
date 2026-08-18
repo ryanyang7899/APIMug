@@ -17,6 +17,7 @@ final class SettingsWindowController: NSObject {
     private var monthUsageCheck: NSButton!
     private var updateFreqPopup: NSPopUpButton!
     private let updateStatusLabel = NSTextField(labelWithString: "")
+    private var launchAtLoginCheck: NSButton!
 
     private struct SiteRowControls {
         let name: NSTextField
@@ -166,6 +167,11 @@ final class SettingsWindowController: NSObject {
         monthUsageCheck.state = (config.showMonthUsageInMenuBar ?? false) ? .on : .off
         self.monthUsageCheck = monthUsageCheck
         stack.addArrangedSubview(monthUsageCheck)
+
+        let launchAtLoginCheck = NSButton(checkboxWithTitle: "开机自动启动", target: nil, action: nil)
+        launchAtLoginCheck.state = LoginItem.isEnabled ? .on : .off
+        self.launchAtLoginCheck = launchAtLoginCheck
+        stack.addArrangedSubview(launchAtLoginCheck)
         stack.addArrangedSubview(makeSeparator())
 
         // —— 站点 ——
@@ -373,6 +379,7 @@ final class SettingsWindowController: NSObject {
     @objc private func apply() {
         collectFields()
         onSave?(config)
+        applyLoginItemIfChanged()
     }
 
     /// 立即检查更新（触发后结果由 showUpdateStatus 反馈）
@@ -389,7 +396,23 @@ final class SettingsWindowController: NSObject {
     @objc private func save() {
         collectFields()
         onSave?(config)
+        applyLoginItemIfChanged()
         window.close()
+    }
+
+    /// 按「开机自动启动」勾选状态注册/注销登录项，并同步实际状态
+    private func applyLoginItemIfChanged() {
+        let wantOn = launchAtLoginCheck.state == .on
+        do {
+            try LoginItem.setEnabled(wantOn)
+        } catch {
+            let alert = NSAlert()
+            alert.messageText = "无法设置开机自启动"
+            alert.informativeText = "\(error)\n可前往 系统设置 → 通用 → 登录项 手动设置。"
+            alert.alertStyle = .warning
+            alert.runModal()
+        }
+        launchAtLoginCheck.state = LoginItem.isEnabled ? .on : .off
     }
 
     @objc private func cancel() {
