@@ -94,14 +94,16 @@ final class DailyUsageChartView: NSView {
             padL + plotW * (n == 1 ? 0.5 : CGFloat(i) / CGFloat(n - 1))
         }
         func yPos(_ v: Double) -> CGFloat {
-            padT + plotH * (1 - CGFloat(v) / maxV)
+            // 非翻转坐标系：值越大 y 越大（越靠上）
+            padT + plotH * (CGFloat(v) / maxV)
         }
 
-        // —— 网格：3 条水平线 ——
+        // —— 网格：3 条水平线（0% / 50% / 100%）——
         ctx.setStrokeColor(NSColor.separatorColor.withAlphaComponent(0.4).cgColor)
         ctx.setLineWidth(1)
         for i in 0...2 {
-            let y = padT + plotH * (1 - CGFloat(i) / 2)
+            // NSView 非翻转坐标系：原点在左下，y 向上增大 → 数值越大越靠上
+            let y = padT + plotH * (CGFloat(i) / 2)
             ctx.move(to: CGPoint(x: padL, y: y))
             ctx.addLine(to: CGPoint(x: w - padR, y: y))
             ctx.strokePath()
@@ -184,9 +186,10 @@ final class DailyUsageChartView: NSView {
             let bubbleW = max(dateAttr.size().width, valueAttr.size().width) + 16
             let bubbleH: CGFloat = 32
             var bx = p.x - bubbleW / 2
-            var by = p.y - bubbleH - 5
+            var by = p.y - bubbleH - 5          // 优先放点上方
+            if by < padT - 4 { by = p.y + 6 }  // 上方放不下则放点下方
             bx = min(max(bx, 2), w - bubbleW - 2)
-            by = max(by, padT - 4)
+            by = min(max(by, 2), h - bubbleH - 2)
 
             let bubbleRect = NSRect(x: bx, y: by, width: bubbleW, height: bubbleH)
             let bubble = NSBezierPath(roundedRect: bubbleRect, xRadius: 6, yRadius: 6)

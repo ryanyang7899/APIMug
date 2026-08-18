@@ -31,6 +31,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.count >= 3, args[1] == "--loginitem" {
             CLI.runLoginItem(args[2])   // status / on / off
         }
+        if args.count >= 2, args[1] == "--charttest" {
+            CLI.runChartTest()          // 渲染折线图到 /tmp/chart.png 供检查
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
@@ -429,6 +432,29 @@ enum CLI {
             print("ERROR: \(error)")
         }
         print("操作后状态: \(LoginItem.isEnabled ? "已开启" : "未开启")")
+        exit(0)
+    }
+
+    /// 折线图渲染自测：模拟「前6天0、今天有用量」，导出 PNG 到 /tmp/chart.png
+    static func runChartTest() -> Never {
+        let data: [(day: String, value: Double)] = [
+            ("2026-08-12", 0), ("2026-08-13", 0), ("2026-08-14", 0),
+            ("2026-08-15", 0), ("2026-08-16", 0), ("2026-08-17", 0),
+            ("2026-08-18", 15.66),
+        ]
+        let view = DailyUsageChartView(data: data, width: 240, height: 90, symbol: "¥")
+        view.frame = NSRect(x: 0, y: 0, width: 240, height: 90)
+        guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
+            print("ERROR: 无法创建位图")
+            exit(2)
+        }
+        view.cacheDisplay(in: view.bounds, to: rep)
+        guard let png = rep.representation(using: .png, properties: [:]) else {
+            print("ERROR: PNG 编码失败")
+            exit(2)
+        }
+        try? png.write(to: URL(fileURLWithPath: "/tmp/chart.png"))
+        print("已导出 /tmp/chart.png")
         exit(0)
     }
 }
