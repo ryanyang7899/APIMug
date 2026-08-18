@@ -104,20 +104,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 近 7 日用量折线图：多站点多色线条，宽度对齐菜单内容宽度（视觉居中），高度紧凑
-        let chartItem = NSMenuItem()
-        let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
-        let chartSeries = controller.dailyUsageSeriesForLastDays(7).map { s in
-            DailyUsageChartView.Series(name: s.site.name,
-                                       color: s.site.provider.chartColor,
-                                       points: s.points)
-        }
-        chartItem.view = DailyUsageChartView(series: chartSeries,
-                                             width: menuChartWidth(),
-                                             symbol: hasCNY ? "¥" : "$")
-        menu.addItem(chartItem)
-        menu.addItem(.separator())
-
         // 每站点两行：第一行 平台+余额；第二行 本日/本月/更新时间
         let enabledSites = controller.config.sites.filter { $0.enabled }
         if enabledSites.isEmpty {
@@ -173,6 +159,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quit = NSMenuItem(title: "退出", action: #selector(quitApp(_:)), keyEquivalent: "q")
         quit.keyEquivalentModifierMask = [.command]
         menu.addItem(quit)
+
+        // 近 7 日用量折线图：先实测文字菜单总宽，图表等宽插入 → 填满弹窗、左右等距居中
+        // （视图项无内边距，故图表宽度 = 菜单实际宽度即居中）
+        let chartItem = NSMenuItem()
+        let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
+        let chartSeries = controller.dailyUsageSeriesForLastDays(7).map { s in
+            DailyUsageChartView.Series(name: s.site.name,
+                                       color: s.site.provider.chartColor,
+                                       points: s.points)
+        }
+        chartItem.view = DailyUsageChartView(series: chartSeries,
+                                             width: max(240, menu.size.width),
+                                             symbol: hasCNY ? "¥" : "$")
+        menu.insertItem(chartItem, at: 2)
+        menu.insertItem(.separator(), at: 3)
 
         statusItem.button?.title = controller.aggregateShortTitle()
     }
@@ -248,27 +249,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func fmt(_ format: String, _ value: Double) -> String {
         String(format: format, value)
-    }
-
-    /// 计算菜单内容宽度（取所有文字行的最宽值 + 内边距），让折线图与弹窗同宽、视觉居中
-    private func menuChartWidth() -> CGFloat {
-        func textWidth(_ s: String, _ size: CGFloat) -> CGFloat {
-            NSAttributedString(string: s,
-                               attributes: [.font: NSFont.systemFont(ofSize: size)]).size().width
-        }
-        var maxW: CGFloat = 0
-        let (h1, h2) = headerLines()
-        maxW = max(maxW, textWidth(h1, 13), textWidth(h2, 11))
-        for site in controller.config.sites where site.enabled {
-            maxW = max(maxW, siteRowAttributedTitle(site: site).size().width)
-        }
-        maxW = max(maxW, textWidth("版本 v\(Updater.installedVersion())", 13))
-        maxW = max(maxW, textWidth("检查更新…", 13))
-        maxW = max(maxW, textWidth("⬆ 发现新版本 v0.0.0 — 前往下载", 13))
-        maxW = max(maxW, textWidth("忽略此版本 v0.0.0", 13))
-        // 文字项在菜单里左右内边距共约 35pt（--measure 实测：内容216.2→菜单251）
-        // 视图项无内边距，故图表宽度须等于文字菜单总宽，才能填满弹窗并居中
-        return max(240, maxW + 35)
     }
 
     // MARK: - 动作
