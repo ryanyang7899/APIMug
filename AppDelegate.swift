@@ -2,7 +2,7 @@ import AppKit
 import Darwin
 
 @main
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private let menu = NSMenu()
     private var controller: MonitorController!
@@ -12,6 +12,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var updateInfo: UpdateInfo?
     private var isUpdating = false
     private var lastManualCheckResult: String?
+    // 菜单当前是否打开（避免 tracking 期间重建导致崩溃）
+    private var menuIsOpen = false
 
     /// 入口：先处理 --test 无头自测分支，否则启动菜单栏应用。
     /// 不能用 NSApplicationMain（需要 MainMenu.nib），用自定义 @main。
@@ -39,6 +41,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.title = "…"
+        menu.delegate = self
         statusItem.menu = menu
 
         let config = ConfigStore.loadConfig()
@@ -64,9 +67,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         true
     }
 
+    // MARK: - NSMenuDelegate
+
+    /// 每次菜单打开前强制重建，保证显示最新数据（menuWillOpen 阶段修改菜单是安全的）
+    func menuWillOpen(_ menu: NSMenu) {
+        menuIsOpen = true
+        rebuildMenu(force: true)
+    }
+
+    func menuDidClose(_ menu: NSMenu) {
+        menuIsOpen = false
+    }
+
     // MARK: - 菜单
 
-    private func rebuildMenu() {
+    private func rebuildMenu(force: Bool = false) {
+        // 菜单正在显示时修改会崩溃（AppKit 不允许 tracking 期间改动），仅更新标题；
+        // 下次打开前会在 menuWillOpen 中强制重建，保证内容最新。
+        guard force || !menuIsOpen else {
+            statusItem.button?.title = controller.aggregateShortTitle()
+            return
+        }
         menu.removeAllItems()
 
         // 汇总头部（两行：状态 + 上次检查时间）
