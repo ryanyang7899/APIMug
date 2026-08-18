@@ -230,16 +230,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(quit)
     }
 
-    /// 头部两行：第一行 状态；第二行 上次检查时间
+    /// 头部两行：第一行 状态（含异常/低余额提示）；第二行 上次检查时间
     private func headerLines() -> (String, String) {
-        var okCount = 0
         var errCount = 0
+        var lowCount = 0
         for site in controller.config.sites where site.enabled {
             if let snap = controller.snapshots[site.id] {
-                if snap.ok { okCount += 1 } else { errCount += 1 }
+                if !snap.ok {
+                    errCount += 1
+                } else if let b = snap.balance {
+                    let t = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : controller.config.defaultLowBalanceThreshold
+                    if b < t { lowCount += 1 }
+                }
             }
         }
-        let status = errCount > 0 ? "⚠ \(errCount) 个站点异常" : "全部正常"
+        let status: String
+        if errCount > 0 {
+            status = "⚠ \(errCount) 个站点异常"
+        } else if lowCount > 0 {
+            status = "! \(lowCount) 个站点余额低"
+        } else {
+            status = "全部正常"
+        }
         let lastTime = controller.snapshots.values.map { $0.checkedAt }.max()
             .map { AppFormatters.time.string(from: $0) } ?? "—"
         return (status, "上次检查 \(lastTime)")

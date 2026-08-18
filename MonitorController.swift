@@ -130,17 +130,17 @@ final class MonitorController {
     func aggregateShortTitle() -> String {
         let enabledSites = config.sites.filter { $0.enabled }
 
-        // 有站点报错 → ⚠︎
+        // 警告前缀（⚠ 报错 / ! 低余额），与数据并列显示，不覆盖
+        var prefix = ""
         if enabledSites.contains(where: { snapshots[$0.id]?.ok == false }) {
-            return "⚠︎"
+            prefix += "⚠︎ "
         }
-        // 有站点低于阈值 → !
         let anyLow = enabledSites.contains { site in
             guard let snap = snapshots[site.id], let b = snap.balance else { return false }
             let t = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : config.defaultLowBalanceThreshold
             return b < t
         }
-        if anyLow { return "!" }
+        if anyLow { prefix += "! " }
 
         // 余额 / 本日 / 本月 三个显示项并列，互不冲突
         let showBalance = config.showBalanceInMenuBar ?? true
@@ -187,7 +187,7 @@ final class MonitorController {
             parts.append("本月 \(symbol)" + (AppFormatters.money.string(from: NSNumber(value: total)) ?? "0"))
         }
 
-        // 全部未开启 → 兜底显示余额，仍无则 ☕
+        // 全部未开启 → 兜底显示余额，仍无则 ☕（均保留警告前缀）
         if parts.isEmpty {
             let totalCNY = enabledSites.reduce(0.0) { sum, site in
                 guard let snap = snapshots[site.id], snap.currency == "CNY" else { return sum }
@@ -198,14 +198,14 @@ final class MonitorController {
                 return sum + (snap.balance ?? 0)
             }
             if totalCNY > 0 {
-                return "¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0")
+                return prefix + "¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0")
             }
             if totalUSD > 0 {
-                return "$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0")
+                return prefix + "$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0")
             }
-            return "☕"
+            return prefix.isEmpty ? "☕" : prefix + "☕"
         }
-        return parts.joined(separator: " · ")
+        return prefix + parts.joined(separator: " · ")
     }
 
     func scheduleTimer() {
