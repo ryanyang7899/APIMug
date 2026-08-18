@@ -6,6 +6,58 @@ enum ProviderType: String, Codable, CaseIterable {
     case deepseek = "deepseek"
     /// OpenAI / NewAPI 兼容：GET {base}/v1/dashboard/billing/*
     case newapi = "newapi"
+    /// OpenRouter：GET {base}/api/v1/key
+    case openrouter = "openrouter"
+    /// 月之暗面 Kimi：GET {base}/v1/users/me/balance
+    case kimi = "kimi"
+    /// 硅基流动 SiliconFlow：GET {base}/v1/user/info
+    case siliconflow = "siliconflow"
+    /// 阶跃星辰 StepFun：GET {base}/v1/accounts
+    case stepfun = "stepfun"
+    /// DeepInfra：GET {base}/payment/checklist
+    case deepinfra = "deepinfra"
+
+    /// 设置界面显示名
+    var displayName: String {
+        switch self {
+        case .deepseek: return "DeepSeek 官方"
+        case .newapi: return "OpenAI / NewAPI"
+        case .openrouter: return "OpenRouter"
+        case .kimi: return "Kimi（月之暗面）"
+        case .siliconflow: return "硅基流动 SiliconFlow"
+        case .stepfun: return "阶跃星辰 StepFun"
+        case .deepinfra: return "DeepInfra"
+        }
+    }
+
+    /// 该平台的默认 Base URL（新增站点时自动填入）
+    var defaultBaseURL: String {
+        switch self {
+        case .deepseek: return "https://api.deepseek.com"
+        case .newapi: return ""
+        case .openrouter: return "https://openrouter.ai"
+        case .kimi: return "https://api.moonshot.cn"
+        case .siliconflow: return "https://api.siliconflow.cn"
+        case .stepfun: return "https://api.stepfun.com"
+        case .deepinfra: return "https://api.deepinfra.com"
+        }
+    }
+
+    /// 是否使用「余额基准法」推算本日/本月用量（仅余额型平台）
+    var usesBalanceTracking: Bool {
+        switch self {
+        case .deepseek, .kimi, .siliconflow, .stepfun, .deepinfra: return true
+        case .newapi, .openrouter: return false   // 这两种平台 API 直接返回用量
+        }
+    }
+
+    /// 该平台余额/用量的主要币种
+    var displayCurrency: String {
+        switch self {
+        case .deepseek, .kimi, .siliconflow, .stepfun: return "CNY"
+        case .newapi, .openrouter, .deepinfra: return "USD"
+        }
+    }
 }
 
 /// 一个监测站点
@@ -150,6 +202,91 @@ struct NewAPIUsage: Decodable {
     let totalUsage: Double
     enum CodingKeys: String, CodingKey {
         case totalUsage = "total_usage"
+    }
+}
+
+// MARK: - 各平台余额/用量响应 DTO
+
+/// 兼容「JSON 数字」和「JSON 字符串数字」两种字段，缺失/null 时为 nil
+struct FlexibleDouble: Decodable {
+    let value: Double?
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if let d = try? c.decode(Double.self) { value = d }
+        else if let s = try? c.decode(String.self) { value = Double(s) }
+        else { value = nil }
+    }
+}
+
+/// OpenRouter：GET /api/v1/key
+struct OpenRouterKeyResponse: Decodable {
+    let data: OpenRouterKeyData
+}
+struct OpenRouterKeyData: Decodable {
+    let limit: FlexibleDouble?          // 信用额度上限（null = 无限）
+    let limitRemaining: FlexibleDouble? // 剩余额度
+    let usageDaily: FlexibleDouble?     // 今日用量
+    let usageWeekly: FlexibleDouble?    // 本周用量
+    let usageMonthly: FlexibleDouble?   // 本月用量
+    enum CodingKeys: String, CodingKey {
+        case limit
+        case limitRemaining = "limit_remaining"
+        case usageDaily = "usage_daily"
+        case usageWeekly = "usage_weekly"
+        case usageMonthly = "usage_monthly"
+    }
+}
+
+/// 月之暗面 Kimi：GET /v1/users/me/balance
+struct KimiBalanceResponse: Decodable {
+    let data: KimiBalanceData
+}
+struct KimiBalanceData: Decodable {
+    let availableBalance: FlexibleDouble?  // 可用余额
+    let cashBalance: FlexibleDouble?       // 现金余额
+    let voucherBalance: FlexibleDouble?    // 代金券余额
+    enum CodingKeys: String, CodingKey {
+        case availableBalance = "available_balance"
+        case cashBalance = "cash_balance"
+        case voucherBalance = "voucher_balance"
+    }
+}
+
+/// 硅基流动 SiliconFlow：GET /v1/user/info
+struct SiliconFlowUserInfo: Decodable {
+    let data: SiliconFlowUserData
+}
+struct SiliconFlowUserData: Decodable {
+    let balance: FlexibleDouble?        // 赠送余额
+    let chargeBalance: FlexibleDouble?  // 充值余额
+    let totalBalance: FlexibleDouble?   // 总余额
+}
+
+/// 阶跃星辰 StepFun：GET /v1/accounts
+struct StepFunAccount: Decodable {
+    let balance: FlexibleDouble?          // 当前可用余额
+    let type: String?                     // prepaid / postpaid
+    let totalCashBalance: FlexibleDouble? // 总充值
+    let totalVoucherBalance: FlexibleDouble? // 总赠送
+    enum CodingKeys: String, CodingKey {
+        case balance
+        case type
+        case totalCashBalance = "total_cash_balance"
+        case totalVoucherBalance = "total_voucher_balance"
+    }
+}
+
+/// DeepInfra：GET /payment/checklist
+struct DeepInfraChecklist: Decodable {
+    let stripeBalance: FlexibleDouble?  // 负值=可用余额，正值=欠款
+    let recent: FlexibleDouble?         // 上次发票后用量
+    let limit: FlexibleDouble?
+    let suspended: Bool?
+    enum CodingKeys: String, CodingKey {
+        case stripeBalance = "stripe_balance"
+        case recent
+        case limit
+        case suspended
     }
 }
 

@@ -186,7 +186,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             if let m = snap.tracking?.monthUsage { parts.append("本月 \(fmt("¥%.2f", m))") }
             parts.append("更新 \(time)")
             line2 = parts.joined(separator: " · ")
+        } else if snap.currency == "USD", snap.usedToday == nil {
+            // 仅余额的美元平台（如 DeepInfra）
+            line1 = "\(mark) \(site.name) — 余额 \(fmt("$%.2f", snap.balance ?? 0))"
+            line2 = "更新 \(time)"
         } else {
+            // 有用量的平台（OpenRouter / NewAPI）
             line1 = "\(mark) \(site.name) — 今日 \(fmt("$%.2f", snap.usedToday ?? 0))"
             var parts: [String] = []
             if let m = snap.usedThisMonth { parts.append("本月 \(fmt("$%.2f", m))") }

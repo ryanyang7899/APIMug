@@ -41,6 +41,16 @@ enum APIService {
             return try await fetchDeepSeek(site)
         case .newapi:
             return try await fetchNewAPI(site)
+        case .openrouter:
+            return try await fetchOpenRouter(site)
+        case .kimi:
+            return try await fetchKimi(site)
+        case .siliconflow:
+            return try await fetchSiliconFlow(site)
+        case .stepfun:
+            return try await fetchStepFun(site)
+        case .deepinfra:
+            return try await fetchDeepInfra(site)
         }
     }
 
@@ -116,6 +126,105 @@ enum APIService {
             throw APIError.decode(error)
         }
         return usage.totalUsage / 100.0  // 分 → 美元
+    }
+
+    // MARK: - OpenRouter
+
+    private static func fetchOpenRouter(_ site: Site) async throws -> SiteResult {
+        let url = try makeURL(base: site.baseURL, path: "api/v1/key")
+        let data = try await get(url, token: site.apiToken)
+        let resp: OpenRouterKeyResponse
+        do {
+            resp = try JSONDecoder().decode(OpenRouterKeyResponse.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        let d = resp.data
+        return SiteResult(siteID: site.id,
+                          balance: d.limitRemaining?.value,
+                          currency: "USD",
+                          usedToday: d.usageDaily?.value,
+                          usedThisMonth: d.usageMonthly?.value,
+                          hardLimit: d.limit?.value,
+                          checkedAt: Date())
+    }
+
+    // MARK: - Kimi（月之暗面）
+
+    private static func fetchKimi(_ site: Site) async throws -> SiteResult {
+        let url = try makeURL(base: site.baseURL, path: "v1/users/me/balance")
+        let data = try await get(url, token: site.apiToken)
+        let resp: KimiBalanceResponse
+        do {
+            resp = try JSONDecoder().decode(KimiBalanceResponse.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        return SiteResult(siteID: site.id,
+                          balance: resp.data.availableBalance?.value,
+                          currency: "CNY",
+                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
+                          checkedAt: Date())
+    }
+
+    // MARK: - 硅基流动 SiliconFlow
+
+    private static func fetchSiliconFlow(_ site: Site) async throws -> SiteResult {
+        let url = try makeURL(base: site.baseURL, path: "v1/user/info")
+        let data = try await get(url, token: site.apiToken)
+        let resp: SiliconFlowUserInfo
+        do {
+            resp = try JSONDecoder().decode(SiliconFlowUserInfo.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        // totalBalance 优先，回退到 chargeBalance（有的账号只有充值余额字段）
+        let balance = resp.data.totalBalance?.value ?? resp.data.chargeBalance?.value
+        return SiteResult(siteID: site.id,
+                          balance: balance,
+                          currency: "CNY",
+                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
+                          checkedAt: Date())
+    }
+
+    // MARK: - 阶跃星辰 StepFun
+
+    private static func fetchStepFun(_ site: Site) async throws -> SiteResult {
+        let url = try makeURL(base: site.baseURL, path: "v1/accounts")
+        let data = try await get(url, token: site.apiToken)
+        let resp: StepFunAccount
+        do {
+            resp = try JSONDecoder().decode(StepFunAccount.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        return SiteResult(siteID: site.id,
+                          balance: resp.balance?.value,
+                          currency: "CNY",
+                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
+                          checkedAt: Date())
+    }
+
+    // MARK: - DeepInfra
+
+    private static func fetchDeepInfra(_ site: Site) async throws -> SiteResult {
+        let url = try makeURL(base: site.baseURL, path: "payment/checklist",
+                              query: [URLQueryItem(name: "compute_owed", value: "true")])
+        let data = try await get(url, token: site.apiToken)
+        let resp: DeepInfraChecklist
+        do {
+            resp = try JSONDecoder().decode(DeepInfraChecklist.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        // stripe_balance：负值=可用余额，正值=欠款 → 余额取相反数
+        let balance = resp.stripeBalance?.value.map { -$0 }
+        return SiteResult(siteID: site.id,
+                          balance: balance,
+                          currency: "USD",
+                          usedToday: nil, usedThisMonth: nil,
+                          hardLimit: resp.limit?.value,
+                          checkedAt: Date())
     }
 
     // MARK: - 底层请求

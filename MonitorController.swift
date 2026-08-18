@@ -48,7 +48,7 @@ final class MonitorController {
                                             usedToday: result.usedToday, usedThisMonth: result.usedThisMonth,
                                             hardLimit: result.hardLimit, lastError: nil)
                 snapshot.tracking = snapshots[site.id]?.tracking   // 延续用量追踪状态
-                if site.provider == .deepseek, let balance = result.balance {
+                if site.provider.usesBalanceTracking, let balance = result.balance {
                     var t = snapshot.tracking ?? UsageTracking()
                     UsageTracker.advance(&t, date: result.checkedAt, balance: balance)
                     snapshot.tracking = t
@@ -103,11 +103,12 @@ final class MonitorController {
         let showBalance = config.showBalanceInMenuBar ?? true
         let showToday = config.showTodayUsageInMenuBar ?? false
         let showMonth = config.showMonthUsageInMenuBar ?? false
-        let symbol = enabledSites.contains(where: { $0.provider == .deepseek }) ? "¥" : "$"
+        let hasCNY = enabledSites.contains(where: { $0.provider.displayCurrency == "CNY" })
+        let symbol = hasCNY ? "¥" : "$"
 
         var parts: [String] = []
 
-        // 余额总额
+        // 余额总额（CNY 与 USD 分别汇总）
         if showBalance {
             let totalCNY = enabledSites.reduce(0.0) { sum, site in
                 guard let snap = snapshots[site.id], snap.currency == "CNY" else { return sum }
@@ -119,16 +120,17 @@ final class MonitorController {
             }
             if totalCNY > 0 {
                 parts.append("¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0"))
-            } else if totalUSD > 0 {
+            }
+            if totalUSD > 0 {
                 parts.append("$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0"))
             }
         }
 
-        // 本日用量
+        // 本日用量：余额追踪平台用 tracking，其他用 API 返回
         if showToday {
             let total = enabledSites.reduce(0.0) { sum, site in
                 guard let snap = snapshots[site.id] else { return sum }
-                return sum + (site.provider == .deepseek ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0))
+                return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0))
             }
             parts.append("今日 \(symbol)" + (AppFormatters.money.string(from: NSNumber(value: total)) ?? "0"))
         }
@@ -137,7 +139,7 @@ final class MonitorController {
         if showMonth {
             let total = enabledSites.reduce(0.0) { sum, site in
                 guard let snap = snapshots[site.id] else { return sum }
-                return sum + (site.provider == .deepseek ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0))
+                return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0))
             }
             parts.append("本月 \(symbol)" + (AppFormatters.money.string(from: NSNumber(value: total)) ?? "0"))
         }
@@ -148,8 +150,15 @@ final class MonitorController {
                 guard let snap = snapshots[site.id], snap.currency == "CNY" else { return sum }
                 return sum + (snap.balance ?? 0)
             }
+            let totalUSD = enabledSites.reduce(0.0) { sum, site in
+                guard let snap = snapshots[site.id], snap.currency == "USD" else { return sum }
+                return sum + (snap.balance ?? 0)
+            }
             if totalCNY > 0 {
                 return "¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0")
+            }
+            if totalUSD > 0 {
+                return "$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0")
             }
             return "☕"
         }

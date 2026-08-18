@@ -239,8 +239,15 @@ final class SettingsWindowController: NSObject {
         let providerLabel = makeLabel()
         providerLabel.stringValue = "类型"
         let providerPopup = NSPopUpButton()
-        providerPopup.addItems(withTitles: ["DeepSeek 官方", "OpenAI / NewAPI"])
-        providerPopup.selectItem(at: site.provider == .deepseek ? 0 : 1)
+        for p in ProviderType.allCases {
+            providerPopup.addItem(withTitle: p.displayName)
+        }
+        if let idx = ProviderType.allCases.firstIndex(of: site.provider) {
+            providerPopup.selectItem(at: idx)
+        }
+        providerPopup.target = self
+        providerPopup.action = #selector(providerChanged(_:))
+        providerPopup.tag = index
         let thresholdLabel = makeLabel()
         thresholdLabel.stringValue = "低余额阈值"
         let thresholdField = NSTextField()
@@ -324,7 +331,8 @@ final class SettingsWindowController: NSObject {
             config.sites[i].enabled = c.enabled.state == .on
             config.sites[i].baseURL = c.url.stringValue.trimmingCharacters(in: .whitespaces)
             config.sites[i].apiToken = c.token.stringValue.trimmingCharacters(in: .whitespaces)
-            config.sites[i].provider = c.provider.indexOfSelectedItem == 0 ? .deepseek : .newapi
+            let pIdx = c.provider.indexOfSelectedItem
+            config.sites[i].provider = ProviderType.allCases[pIdx]
             config.sites[i].lowBalanceThreshold = Double(c.threshold.stringValue) ?? 0
         }
     }
@@ -337,6 +345,21 @@ final class SettingsWindowController: NSObject {
                                 baseURL: "https://api.deepseek.com", apiToken: "",
                                 provider: .deepseek, lowBalanceThreshold: 0))
         rebuild()
+    }
+
+    /// 切换协议类型时，自动填充该平台的默认 Base URL（仅在 URL 为空或还是某平台默认值时）
+    @objc private func providerChanged(_ sender: Any?) {
+        guard let popup = sender as? NSPopUpButton else { return }
+        let idx = popup.tag
+        guard idx >= 0, idx < rowControls.count else { return }
+        let provider = ProviderType.allCases[popup.indexOfSelectedItem]
+        let def = provider.defaultBaseURL
+        let c = rowControls[idx]
+        let knownDefaults = ProviderType.allCases.map { $0.defaultBaseURL }
+        let current = c.url.stringValue.trimmingCharacters(in: .whitespaces)
+        if current.isEmpty || knownDefaults.contains(current) {
+            c.url.stringValue = def
+        }
     }
 
     @objc private func removeSite(_ sender: Any?) {
