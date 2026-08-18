@@ -6,8 +6,8 @@ final class MonitorController {
 
     private(set) var config: AppConfig
     private(set) var snapshots: [UUID: SiteSnapshot] = [:]
-    /// 每日用量历史：日期(yyyy-MM-dd) → 当天总用量
-    private(set) var dailyUsageHistory: [String: Double] = [:]
+    /// 每日用量历史（按站点）：siteID → [日期(yyyy-MM-dd) → 当天用量]
+    private(set) var dailyUsageHistory: [UUID: [String: Double]] = [:]
     private var timer: Timer?
     private var isRefreshing = false
 
@@ -77,33 +77,41 @@ final class MonitorController {
         onStateChange?()
     }
 
-    /// 汇总今日用量并写入历史（折线图数据源）
+    /// 每个启用站点把今日用量写入各自的历史（折线图数据源）
     private func updateDailyUsageHistory() {
         let today = AppFormatters.day.string(from: Date())
-        let total = config.sites.filter { $0.enabled }.reduce(0.0) { sum, site in
-            guard let snap = snapshots[site.id], snap.ok else { return sum }
-            return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0))
-        }
-        dailyUsageHistory[today] = total
-        // 只保留最近 10 天，避免无限增长
-        let keys = dailyUsageHistory.keys.sorted()
-        if keys.count > 10 {
-            for k in keys.prefix(keys.count - 10) {
-                dailyUsageHistory.removeValue(forKey: k)
+        for site in config.sites where site.enabled {
+            guard let snap = snapshots[site.id], snap.ok else { continue }
+            let usage = site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0)
+            var h = dailyUsageHistory[site.id] ?? [:]
+            h[today] = usage
+            // 只保留最近 10 天，避免无限增长
+            let keys = h.keys.sorted()
+            if keys.count > 10 {
+                for k in keys.prefix(keys.count - 10) {
+                    h.removeValue(forKey: k)
+                }
             }
+            dailyUsageHistory[site.id] = h
         }
         ConfigStore.saveDailyUsage(dailyUsageHistory)
     }
 
-    /// 最近 n 天的每日用量（含今天，从旧到新），供折线图使用
-    func dailyUsageForLastDays(_ n: Int) -> [(day: String, value: Double)] {
+    /// 各启用站点最近 n 天的每日用量序列（含今天，从旧到新），供折线图多系列使用
+    func dailyUsageSeriesForLastDays(_ n: Int) -> [(site: Site, points: [(day: String, value: Double)])] {
         let cal = Calendar.current
         let today = Date()
-        var result: [(day: String, value: Double)] = []
+        var days: [String] = []
         for i in (0..<n).reversed() {
-            guard let d = cal.date(byAdding: .day, value: -i, to: today) else { continue }
-            let key = AppFormatters.day.string(from: d)
-            result.append((key, dailyUsageHistory[key] ?? 0))
+            if let d = cal.date(byAdding: .day, value: -i, to: today) {
+                days.append(AppFormatters.day.string(from: d))
+            }
+        }
+        var result: [(site: Site, points: [(day: String, value: Double)])] = []
+        for site in config.sites where site.enabled {
+            let h = dailyUsageHistory[site.id] ?? [:]
+            let points = days.map { ($0, h[$0] ?? 0) }
+            result.append((site, points))
         }
         return result
     }

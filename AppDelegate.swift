@@ -34,6 +34,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.count >= 2, args[1] == "--charttest" {
             CLI.runChartTest()          // 渲染折线图到 /tmp/chart.png 供检查
         }
+        if args.count >= 2, args[1] == "--measure" {
+            CLI.runMeasure()            // 测量菜单宽度，校准折线图宽度
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
@@ -101,10 +104,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 近 7 日用量折线图（宽度对齐菜单内容宽度，视觉居中；高度紧凑；悬停显示当日用量）
+        // 近 7 日用量折线图：多站点多色线条，宽度对齐菜单内容宽度（视觉居中），高度紧凑
         let chartItem = NSMenuItem()
         let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
-        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7),
+        let chartSeries = controller.dailyUsageSeriesForLastDays(7).map { s in
+            DailyUsageChartView.Series(name: s.site.name,
+                                       color: s.site.provider.chartColor,
+                                       points: s.points)
+        }
+        chartItem.view = DailyUsageChartView(series: chartSeries,
                                              width: menuChartWidth(),
                                              symbol: hasCNY ? "¥" : "$")
         menu.addItem(chartItem)
@@ -256,8 +264,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         maxW = max(maxW, textWidth("版本 v\(Updater.installedVersion())", 13))
         maxW = max(maxW, textWidth("检查更新…", 13))
-        // 菜单项左右内边距约 40pt
-        return max(240, maxW + 40)
+        maxW = max(maxW, textWidth("⬆ 发现新版本 v0.0.0 — 前往下载", 13))
+        maxW = max(maxW, textWidth("忽略此版本 v0.0.0", 13))
+        // 文字项在菜单里左右内边距共约 35pt（--measure 实测：内容216.2→菜单251）
+        // 视图项无内边距，故图表宽度须等于文字菜单总宽，才能填满弹窗并居中
+        return max(240, maxW + 35)
     }
 
     // MARK: - 动作
@@ -435,15 +446,24 @@ enum CLI {
         exit(0)
     }
 
-    /// 折线图渲染自测：模拟「前6天0、今天有用量」，导出 PNG 到 /tmp/chart.png
+    /// 折线图渲染自测：模拟两条站点线（含颜色、填充去除、居中宽度），导出 PNG 到 /tmp/chart.png
     static func runChartTest() -> Never {
-        let data: [(day: String, value: Double)] = [
+        let days1: [(day: String, value: Double)] = [
             ("2026-08-12", 0), ("2026-08-13", 0), ("2026-08-14", 0),
             ("2026-08-15", 0), ("2026-08-16", 0), ("2026-08-17", 0),
             ("2026-08-18", 15.66),
         ]
-        let view = DailyUsageChartView(data: data, width: 240, height: 90, symbol: "¥")
-        view.frame = NSRect(x: 0, y: 0, width: 240, height: 90)
+        let days2: [(day: String, value: Double)] = [
+            ("2026-08-12", 0), ("2026-08-13", 0.5), ("2026-08-14", 1.2),
+            ("2026-08-15", 2.0), ("2026-08-16", 1.5), ("2026-08-17", 2.8),
+            ("2026-08-18", 3.1),
+        ]
+        let series = [
+            DailyUsageChartView.Series(name: "DeepSeek", color: NSColor.systemBlue, points: days1),
+            DailyUsageChartView.Series(name: "Kimi", color: NSColor.systemPurple, points: days2),
+        ]
+        let view = DailyUsageChartView(series: series, width: 251, height: 100, symbol: "¥")
+        view.frame = NSRect(x: 0, y: 0, width: 251, height: 100)
         guard let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             print("ERROR: 无法创建位图")
             exit(2)
@@ -455,6 +475,43 @@ enum CLI {
         }
         try? png.write(to: URL(fileURLWithPath: "/tmp/chart.png"))
         print("已导出 /tmp/chart.png")
+        exit(0)
+    }
+
+    /// 测量菜单宽度：文字行实际宽度 vs menu.size，用于校准折线图宽度
+    static func runMeasure() -> Never {
+        let text = "✓ DeepSeek — 余额 ¥60.45\n本日 ¥15.66 · 本月 ¥12.50 · 更新 12:34:56"
+        let attr = NSAttributedString(string: text, attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+        ])
+        print("文字内容宽度: \(attr.size().width)")
+
+        let menu = NSMenu()
+        let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item.attributedTitle = attr
+        menu.addItem(item)
+        print("纯文字菜单 size: \(menu.size.width)")
+
+        // 视图项菜单
+        let menu2 = NSMenu()
+        let item2 = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        item2.attributedTitle = attr
+        menu2.addItem(item2)
+        let chart = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 90))
+        let chartItem = NSMenuItem()
+        chartItem.view = chart
+        menu2.addItem(chartItem)
+        print("含视图项菜单 size: \(menu2.size.width)")
+
+        // 两行字符串 size() 是否返回最宽行
+        let line1 = "✓ DeepSeek — 余额 ¥60.45"
+        let line2 = "本日 ¥15.66 · 本月 ¥12.50 · 更新 12:34:56"
+        let two = NSMutableAttributedString()
+        two.append(NSAttributedString(string: line1, attributes: [.font: NSFont.systemFont(ofSize: 13)]))
+        two.append(NSAttributedString(string: "\n" + line2, attributes: [.font: NSFont.systemFont(ofSize: 11)]))
+        print("两行字符串 size(): \(two.size().width)")
+        print("line1 单独宽度: \((line1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width)")
+        print("line2 单独宽度: \((line2 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width)")
         exit(0)
     }
 }

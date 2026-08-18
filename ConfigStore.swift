@@ -97,20 +97,26 @@ enum ConfigStore {
         set { defaults.set(newValue, forKey: lastNotifiedVersionKey) }
     }
 
-    // MARK: - 每日用量历史（折线图）
+    // MARK: - 每日用量历史（折线图，按站点）
 
     static let dailyUsageKey = "dailyUsageHistory"
 
-    static func loadDailyUsage() -> [String: Double] {
+    static func loadDailyUsage() -> [UUID: [String: Double]] {
         guard let data = defaults.data(forKey: dailyUsageKey),
-              let dict = try? JSONDecoder().decode([String: Double].self, from: data) else {
+              let dict = try? JSONDecoder().decode([String: [String: Double]].self, from: data) else {
             return [:]
         }
-        return dict
+        var result: [UUID: [String: Double]] = [:]
+        for (k, v) in dict {
+            if let id = UUID(uuidString: k) { result[id] = v }
+        }
+        return result
     }
 
-    static func saveDailyUsage(_ dict: [String: Double]) {
-        if let data = try? JSONEncoder().encode(dict) {
+    static func saveDailyUsage(_ dict: [UUID: [String: Double]]) {
+        var s: [String: [String: Double]] = [:]
+        for (k, v) in dict { s[k.uuidString] = v }
+        if let data = try? JSONEncoder().encode(s) {
             defaults.set(data, forKey: dailyUsageKey)
         }
     }
