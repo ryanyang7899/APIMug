@@ -130,15 +130,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         menu.removeAllItems()
 
-        // 汇总头部（两行：状态 + 上次检查时间）
-        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
-        header.isEnabled = false
-        let (headerLine1, headerLine2) = headerLines()
-        header.attributedTitle = twoLine(headerLine1, headerLine2, weight: .semibold)
-        menu.addItem(header)
+        // 用「探针」临时菜单测量文字总宽（禁止在展示中的菜单上 insertItem —— AppKit 断言崩溃）
+        let probe = NSMenu()
+        addMenuHeader(to: probe)
+        addSiteRows(to: probe)
+        addBottomItems(to: probe)
+        let chartWidth = max(240, probe.size.width)
+
+        // 真实菜单按顺序构建（全部用 addItem）
+        addMenuHeader(to: menu)
+
+        // 近 7 日用量折线图：宽度=文字菜单总宽 → 填满弹窗、左右等距居中
+        let chartItem = NSMenuItem()
+        let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
+        let chartSeries = controller.dailyUsageSeriesForLastDays(7).map { s in
+            DailyUsageChartView.Series(name: s.site.name,
+                                       color: s.site.provider.chartColor,
+                                       points: s.points)
+        }
+        chartItem.view = DailyUsageChartView(series: chartSeries,
+                                             width: chartWidth,
+                                             symbol: hasCNY ? "¥" : "$")
+        menu.addItem(chartItem)
         menu.addItem(.separator())
 
-        // 每站点两行：第一行 平台+余额；第二行 本日/本月/更新时间
+        addSiteRows(to: menu)
+        addBottomItems(to: menu)
+
+        statusItem.button?.title = controller.aggregateShortTitle()
+    }
+
+    /// 头部两行 + 分隔线
+    private func addMenuHeader(to menu: NSMenu) {
+        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        let (line1, line2) = headerLines()
+        header.attributedTitle = twoLine(line1, line2, weight: .semibold)
+        menu.addItem(header)
+        menu.addItem(.separator())
+    }
+
+    /// 站点行（每站点两行：平台+余额 / 本日·本月·更新时间）
+    private func addSiteRows(to menu: NSMenu) {
         let enabledSites = controller.config.sites.filter { $0.enabled }
         if enabledSites.isEmpty {
             let empty = NSMenuItem(title: "未启用任何站点，请在设置中添加", action: nil, keyEquivalent: "")
@@ -152,10 +185,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 menu.addItem(item)
             }
         }
+    }
 
+    /// 版本 / 更新 / 操作区（底部固定项）
+    private func addBottomItems(to menu: NSMenu) {
         menu.addItem(.separator())
 
-        // —— 版本与更新 ——
         let versionRow = NSMenuItem(title: "版本 v\(Updater.installedVersion())", action: nil, keyEquivalent: "")
         versionRow.isEnabled = false
         menu.addItem(versionRow)
@@ -193,23 +228,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let quit = NSMenuItem(title: "退出", action: #selector(quitApp(_:)), keyEquivalent: "q")
         quit.keyEquivalentModifierMask = [.command]
         menu.addItem(quit)
-
-        // 近 7 日用量折线图：先实测文字菜单总宽，图表等宽插入 → 填满弹窗、左右等距居中
-        // （视图项无内边距，故图表宽度 = 菜单实际宽度即居中）
-        let chartItem = NSMenuItem()
-        let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
-        let chartSeries = controller.dailyUsageSeriesForLastDays(7).map { s in
-            DailyUsageChartView.Series(name: s.site.name,
-                                       color: s.site.provider.chartColor,
-                                       points: s.points)
-        }
-        chartItem.view = DailyUsageChartView(series: chartSeries,
-                                             width: max(240, menu.size.width),
-                                             symbol: hasCNY ? "¥" : "$")
-        menu.insertItem(chartItem, at: 2)
-        menu.insertItem(.separator(), at: 3)
-
-        statusItem.button?.title = controller.aggregateShortTitle()
     }
 
     /// 头部两行：第一行 状态；第二行 上次检查时间
