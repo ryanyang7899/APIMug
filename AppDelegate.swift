@@ -66,15 +66,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func rebuildMenu() {
         menu.removeAllItems()
 
-        // 汇总头部
+        // 汇总头部（两行：状态 + 上次检查时间）
         let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
         header.isEnabled = false
-        header.attributedTitle = NSAttributedString(string: headerTitle(),
-                                                    attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+        let (headerLine1, headerLine2) = headerLines()
+        header.attributedTitle = twoLine(headerLine1, headerLine2, weight: .semibold)
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 每站点一行
+        // 每站点两行：第一行 平台+余额；第二行 本日/本月/更新时间
         let enabledSites = controller.config.sites.filter { $0.enabled }
         if enabledSites.isEmpty {
             let empty = NSMenuItem(title: "未启用任何站点，请在设置中添加", action: nil, keyEquivalent: "")
@@ -82,8 +82,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             menu.addItem(empty)
         } else {
             for site in enabledSites {
-                let item = NSMenuItem(title: siteRowTitle(site: site), action: nil, keyEquivalent: "")
+                let item = NSMenuItem(title: "", action: nil, keyEquivalent: "")
                 item.isEnabled = false
+                item.attributedTitle = siteRowAttributedTitle(site: site)
                 menu.addItem(item)
             }
         }
@@ -132,7 +133,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem.button?.title = controller.aggregateShortTitle()
     }
 
-    private func headerTitle() -> String {
+    /// 头部两行：第一行 状态；第二行 上次检查时间
+    private func headerLines() -> (String, String) {
         var okCount = 0
         var errCount = 0
         for site in controller.config.sites where site.enabled {
@@ -140,44 +142,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if snap.ok { okCount += 1 } else { errCount += 1 }
             }
         }
-        var parts: [String] = []
-        if errCount > 0 {
-            parts.append("⚠ \(errCount) 个站点异常")
-        } else {
-            parts.append("全部正常")
-        }
+        let status = errCount > 0 ? "⚠ \(errCount) 个站点异常" : "全部正常"
         let lastTime = controller.snapshots.values.map { $0.checkedAt }.max()
             .map { AppFormatters.time.string(from: $0) } ?? "—"
-        parts.append("上次检查 \(lastTime)")
-        return parts.joined(separator: " · ")
+        return (status, "上次检查 \(lastTime)")
     }
 
-    private func siteRowTitle(site: Site) -> String {
+    /// 两行富文本：第一行平台+余额（中粗），第二行本日/本月/更新时间（小号次级色）
+    private func twoLine(_ line1: String, _ line2: String, weight: NSFont.Weight = .regular) -> NSAttributedString {
+        let para = NSMutableParagraphStyle()
+        para.lineSpacing = 2
+        let s = NSMutableAttributedString()
+        s.append(NSAttributedString(string: line1, attributes: [
+            .font: NSFont.systemFont(ofSize: 13, weight: weight),
+            .foregroundColor: NSColor.labelColor,
+            .paragraphStyle: para,
+        ]))
+        s.append(NSAttributedString(string: "\n\(line2)", attributes: [
+            .font: NSFont.systemFont(ofSize: 11),
+            .foregroundColor: NSColor.secondaryLabelColor,
+            .paragraphStyle: para,
+        ]))
+        return s
+    }
+
+    /// 站点行两行内容：第一行 平台+余额；第二行 本日/本月/更新时间
+    private func siteRowAttributedTitle(site: Site) -> NSAttributedString {
         guard let snap = controller.snapshots[site.id] else {
-            return "○ \(site.name) — 尚未检查"
+            return twoLine("○ \(site.name)", "尚未检查")
         }
         let mark = snap.ok ? "✓" : "✕"
         let time = AppFormatters.time.string(from: snap.checkedAt)
-        var info: String
+
+        var line1: String
+        var line2: String
         if let err = snap.lastError {
-            info = "错误: \(err)"
+            line1 = "\(mark) \(site.name) — 错误"
+            line2 = "\(err) · 更新 \(time)"
         } else if snap.currency == "CNY" {
-            var parts: [String] = [String(format: "余额 ¥%.2f", snap.balance ?? 0)]
-            if let d = snap.tracking?.dayUsage {
-                parts.append(String(format: "本日 ¥%.2f", d))
-            }
-            if let m = snap.tracking?.monthUsage {
-                parts.append(String(format: "本月 ¥%.2f", m))
-            }
-            info = parts.joined(separator: " · ")
-        } else {
+            line1 = "\(mark) \(site.name) — 余额 \(fmt("¥%.2f", snap.balance ?? 0))"
             var parts: [String] = []
-            if let t = snap.usedToday { parts.append(String(format: "今日 $%.2f", t)) }
-            if let m = snap.usedThisMonth { parts.append(String(format: "本月 $%.2f", m)) }
-            if let h = snap.hardLimit { parts.append(String(format: "上限 $%.0f", h)) }
-            info = parts.isEmpty ? "OK" : parts.joined(separator: " · ")
+            if let d = snap.tracking?.dayUsage { parts.append("本日 \(fmt("¥%.2f", d))") }
+            if let m = snap.tracking?.monthUsage { parts.append("本月 \(fmt("¥%.2f", m))") }
+            parts.append("更新 \(time)")
+            line2 = parts.joined(separator: " · ")
+        } else {
+            line1 = "\(mark) \(site.name) — 今日 \(fmt("$%.2f", snap.usedToday ?? 0))"
+            var parts: [String] = []
+            if let m = snap.usedThisMonth { parts.append("本月 \(fmt("$%.2f", m))") }
+            if let h = snap.hardLimit { parts.append("上限 \(fmt("$%.0f", h))") }
+            parts.append("更新 \(time)")
+            line2 = parts.joined(separator: " · ")
         }
-        return "\(mark) \(site.name) — \(info) · \(time)"
+        return twoLine(line1, line2)
+    }
+
+    private func fmt(_ format: String, _ value: Double) -> String {
+        String(format: format, value)
     }
 
     // MARK: - 动作
