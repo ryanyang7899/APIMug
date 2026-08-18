@@ -126,7 +126,7 @@ final class MonitorController {
         }
     }
 
-    /// 状态栏短标题
+    /// 状态栏短标题：按各站点自己的「菜单栏显示」开关拼装，每项带站点名首字符标注
     func aggregateShortTitle() -> String {
         let enabledSites = config.sites.filter { $0.enabled }
 
@@ -142,67 +142,30 @@ final class MonitorController {
         }
         if anyLow { prefix += "! " }
 
-        // 余额 / 本日 / 本月 三个显示项并列，互不冲突
-        let showBalance = config.showBalanceInMenuBar ?? true
-        let showToday = config.showTodayUsageInMenuBar ?? false
-        let showMonth = config.showMonthUsageInMenuBar ?? false
-        let hasCNY = enabledSites.contains(where: { $0.provider.displayCurrency == "CNY" })
-        let symbol = hasCNY ? "¥" : "$"
+        func money(_ v: Double) -> String {
+            AppFormatters.money.string(from: NSNumber(value: v)) ?? "0"
+        }
 
         var parts: [String] = []
-
-        // 余额总额（CNY 与 USD 分别汇总）
-        if showBalance {
-            let totalCNY = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id], snap.currency == "CNY" else { return sum }
-                return sum + (snap.balance ?? 0)
+        for site in enabledSites {
+            guard let snap = snapshots[site.id], snap.ok else { continue }
+            let tag = String(site.name.prefix(1))                       // 站点名首字符
+            let symbol = site.provider.displayCurrency == "CNY" ? "¥" : "$"
+            if site.showBalanceInMenuBar ?? false, let b = snap.balance {
+                parts.append("\(tag) \(symbol)\(money(b))")
             }
-            let totalUSD = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id], snap.currency == "USD" else { return sum }
-                return sum + (snap.balance ?? 0)
+            if site.showTodayUsageInMenuBar ?? false {
+                let v = site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0)
+                parts.append("\(tag) 今日 \(symbol)\(money(v))")
             }
-            if totalCNY > 0 {
-                parts.append("¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0"))
-            }
-            if totalUSD > 0 {
-                parts.append("$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0"))
+            if site.showMonthUsageInMenuBar ?? false {
+                let v = site.provider.usesBalanceTracking ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0)
+                parts.append("\(tag) 本月 \(symbol)\(money(v))")
             }
         }
 
-        // 本日用量：余额追踪平台用 tracking，其他用 API 返回
-        if showToday {
-            let total = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id] else { return sum }
-                return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0))
-            }
-            parts.append("今日 \(symbol)" + (AppFormatters.money.string(from: NSNumber(value: total)) ?? "0"))
-        }
-
-        // 本月用量
-        if showMonth {
-            let total = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id] else { return sum }
-                return sum + (site.provider.usesBalanceTracking ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0))
-            }
-            parts.append("本月 \(symbol)" + (AppFormatters.money.string(from: NSNumber(value: total)) ?? "0"))
-        }
-
-        // 全部未开启 → 兜底显示余额，仍无则 ☕（均保留警告前缀）
         if parts.isEmpty {
-            let totalCNY = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id], snap.currency == "CNY" else { return sum }
-                return sum + (snap.balance ?? 0)
-            }
-            let totalUSD = enabledSites.reduce(0.0) { sum, site in
-                guard let snap = snapshots[site.id], snap.currency == "USD" else { return sum }
-                return sum + (snap.balance ?? 0)
-            }
-            if totalCNY > 0 {
-                return prefix + "¥" + (AppFormatters.money.string(from: NSNumber(value: totalCNY)) ?? "0")
-            }
-            if totalUSD > 0 {
-                return prefix + "$" + (AppFormatters.money.string(from: NSNumber(value: totalUSD)) ?? "0")
-            }
+            // 没有任何站点被选中显示 → 保留警告前缀，否则 ☕
             return prefix.isEmpty ? "☕" : prefix + "☕"
         }
         return prefix + parts.joined(separator: " · ")

@@ -70,6 +70,12 @@ struct Site: Codable, Identifiable {
     var provider: ProviderType
     /// 低余额阈值；0 表示使用全局默认值
     var lowBalanceThreshold: Double
+    /// 菜单栏是否显示本站点余额（nil = 不显示）
+    var showBalanceInMenuBar: Bool?
+    /// 菜单栏是否显示本站点本日用量（nil = 不显示）
+    var showTodayUsageInMenuBar: Bool?
+    /// 菜单栏是否显示本站点本月用量（nil = 不显示）
+    var showMonthUsageInMenuBar: Bool?
 }
 
 /// 全局配置
@@ -77,14 +83,12 @@ struct AppConfig: Codable {
     var sites: [Site]
     var refreshIntervalMinutes: Int
     var defaultLowBalanceThreshold: Double
-    /// 菜单栏是否显示余额总额（nil = 显示）
-    var showBalanceInMenuBar: Bool?
-    /// 菜单栏是否显示本日用量（nil = 不显示）
-    var showTodayUsageInMenuBar: Bool?
-    /// 菜单栏是否显示本月用量（nil = 不显示）
-    var showMonthUsageInMenuBar: Bool?
     /// 更新检查频率（nil = 每次启动）
     var updateCheckFrequency: UpdateFrequency?
+    // —— 以下为已废弃的全局菜单栏显示开关，仅用于迁移到各站点后清空 ——
+    var showBalanceInMenuBar: Bool?
+    var showTodayUsageInMenuBar: Bool?
+    var showMonthUsageInMenuBar: Bool?
 }
 
 /// 某站点最近一次检查的结果（持久化，供菜单与聚合显示）

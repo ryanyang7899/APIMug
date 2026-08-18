@@ -12,9 +12,6 @@ final class SettingsWindowController: NSObject {
 
     private var intervalField: NSTextField!
     private var defaultThresholdField: NSTextField!
-    private var balanceCheck: NSButton!
-    private var todayUsageCheck: NSButton!
-    private var monthUsageCheck: NSButton!
     private var updateFreqPopup: NSPopUpButton!
     private let updateStatusLabel = NSTextField(labelWithString: "")
     private var launchAtLoginCheck: NSButton!
@@ -26,6 +23,9 @@ final class SettingsWindowController: NSObject {
         let token: NSSecureTextField
         let provider: NSPopUpButton
         let threshold: NSTextField
+        let showBalance: NSButton
+        let showToday: NSButton
+        let showMonth: NSButton
     }
     private var rowControls: [SiteRowControls] = []
 
@@ -153,21 +153,6 @@ final class SettingsWindowController: NSObject {
         self.defaultThresholdField = defaultThresholdField
         stack.addArrangedSubview(row(with: [thresholdLabel, defaultThresholdField]))
 
-        let balanceCheck = NSButton(checkboxWithTitle: "菜单栏显示余额总额", target: nil, action: nil)
-        balanceCheck.state = (config.showBalanceInMenuBar ?? true) ? .on : .off
-        self.balanceCheck = balanceCheck
-        stack.addArrangedSubview(balanceCheck)
-
-        let todayUsageCheck = NSButton(checkboxWithTitle: "菜单栏显示本日用量", target: nil, action: nil)
-        todayUsageCheck.state = (config.showTodayUsageInMenuBar ?? false) ? .on : .off
-        self.todayUsageCheck = todayUsageCheck
-        stack.addArrangedSubview(todayUsageCheck)
-
-        let monthUsageCheck = NSButton(checkboxWithTitle: "菜单栏显示本月用量", target: nil, action: nil)
-        monthUsageCheck.state = (config.showMonthUsageInMenuBar ?? false) ? .on : .off
-        self.monthUsageCheck = monthUsageCheck
-        stack.addArrangedSubview(monthUsageCheck)
-
         let launchAtLoginCheck = NSButton(checkboxWithTitle: "开机自动启动", target: nil, action: nil)
         launchAtLoginCheck.state = LoginItem.isEnabled ? .on : .off
         self.launchAtLoginCheck = launchAtLoginCheck
@@ -262,6 +247,17 @@ final class SettingsWindowController: NSObject {
         thresholdField.stringValue = site.lowBalanceThreshold > 0 ? String(format: "%.2f", site.lowBalanceThreshold) : ""
         section.addArrangedSubview(row(with: [providerLabel, providerPopup, thresholdLabel, thresholdField]))
 
+        // 菜单栏显示（本站点的余额/用量，独立勾选）
+        let showLabel = makeLabel(width: 70)
+        showLabel.stringValue = "菜单栏显示"
+        let showBalance = NSButton(checkboxWithTitle: "余额", target: nil, action: nil)
+        showBalance.state = (site.showBalanceInMenuBar ?? false) ? .on : .off
+        let showToday = NSButton(checkboxWithTitle: "本日用量", target: nil, action: nil)
+        showToday.state = (site.showTodayUsageInMenuBar ?? false) ? .on : .off
+        let showMonth = NSButton(checkboxWithTitle: "本月用量", target: nil, action: nil)
+        showMonth.state = (site.showMonthUsageInMenuBar ?? false) ? .on : .off
+        section.addArrangedSubview(row(with: [showLabel, showBalance, showToday, showMonth]))
+
         // 删除
         let removeButton = NSButton(title: "删除此站点", target: self, action: #selector(removeSite))
         removeButton.bezelStyle = .rounded
@@ -270,7 +266,9 @@ final class SettingsWindowController: NSObject {
 
         rowControls.append(SiteRowControls(name: nameField, enabled: enabledCheck,
                                            url: urlField, token: tokenField,
-                                           provider: providerPopup, threshold: thresholdField))
+                                           provider: providerPopup, threshold: thresholdField,
+                                           showBalance: showBalance, showToday: showToday,
+                                           showMonth: showMonth))
         return section
     }
 
@@ -323,9 +321,6 @@ final class SettingsWindowController: NSObject {
     private func collectFields() {
         config.refreshIntervalMinutes = max(1, Int(intervalField.stringValue) ?? 30)
         config.defaultLowBalanceThreshold = Double(defaultThresholdField.stringValue) ?? config.defaultLowBalanceThreshold
-        config.showBalanceInMenuBar = balanceCheck.state == .on
-        config.showTodayUsageInMenuBar = todayUsageCheck.state == .on
-        config.showMonthUsageInMenuBar = monthUsageCheck.state == .on
         switch updateFreqPopup.indexOfSelectedItem {
         case 0: config.updateCheckFrequency = .never
         case 2: config.updateCheckFrequency = .daily
@@ -340,6 +335,9 @@ final class SettingsWindowController: NSObject {
             let pIdx = c.provider.indexOfSelectedItem
             config.sites[i].provider = ProviderType.allCases[pIdx]
             config.sites[i].lowBalanceThreshold = Double(c.threshold.stringValue) ?? 0
+            config.sites[i].showBalanceInMenuBar = c.showBalance.state == .on
+            config.sites[i].showTodayUsageInMenuBar = c.showToday.state == .on
+            config.sites[i].showMonthUsageInMenuBar = c.showMonth.state == .on
         }
     }
 

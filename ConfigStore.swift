@@ -10,10 +10,37 @@ enum ConfigStore {
 
     static func loadConfig() -> AppConfig {
         if let data = defaults.data(forKey: configKey),
-           let config = try? JSONDecoder().decode(AppConfig.self, from: data) {
+           var config = try? JSONDecoder().decode(AppConfig.self, from: data) {
+            migrateDisplayFlags(&config)
             return config
         }
         return migratedDefaultConfig()
+    }
+
+    /// 一次性迁移：旧版「全局菜单栏显示开关」→ 各站点。迁移后清空全局字段。
+    private static func migrateDisplayFlags(_ config: inout AppConfig) {
+        let hasLegacy = config.showBalanceInMenuBar != nil
+            || config.showTodayUsageInMenuBar != nil
+            || config.showMonthUsageInMenuBar != nil
+        guard hasLegacy else { return }
+        let legacyBalance = config.showBalanceInMenuBar ?? false
+        let legacyToday = config.showTodayUsageInMenuBar ?? false
+        let legacyMonth = config.showMonthUsageInMenuBar ?? false
+        for i in config.sites.indices {
+            if config.sites[i].showBalanceInMenuBar == nil {
+                config.sites[i].showBalanceInMenuBar = legacyBalance
+            }
+            if config.sites[i].showTodayUsageInMenuBar == nil {
+                config.sites[i].showTodayUsageInMenuBar = legacyToday
+            }
+            if config.sites[i].showMonthUsageInMenuBar == nil {
+                config.sites[i].showMonthUsageInMenuBar = legacyMonth
+            }
+        }
+        config.showBalanceInMenuBar = nil
+        config.showTodayUsageInMenuBar = nil
+        config.showMonthUsageInMenuBar = nil
+        saveConfig(config)
     }
 
     static func saveConfig(_ config: AppConfig) {

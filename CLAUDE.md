@@ -53,7 +53,7 @@ build/APIMug.app/Contents/MacOS/APIMug --measure                        # 测量
 ### 显示与交互要点
 
 - 站点行两行富文本（`twoLine`）：第一行平台+余额，第二行本日/本月/更新时间。仅余额的美元平台（deepinfra）走单独分支显示「余额 $x」。
-- 聚合标题 `aggregateShortTitle()`：`⚠︎`报错 > `!`低余额 > 并列显示的余额(¥/$)/本日/本月 > `☕`兜底。显示项由 `AppConfig.showBalanceInMenuBar` 等三个独立开关控制（并列不互斥）。
+- 聚合标题 `aggregateShortTitle()`：`⚠︎`/`!`警告前缀 + 各站点**带首字符**的余额/用量（`D ¥40.74` = DeepSeek 余额）。显示项由**每个站点**的 `Site.showBalanceInMenuBar` / `showTodayUsageInMenuBar` / `showMonthUsageInMenuBar` 三个开关控制。旧版全局开关字段保留仅用于一次性迁移后清空。
 - 折线图 `DailyUsageChartView`：**非翻转坐标系**（`yPos` 值越大越靠上，注意与默认 AppKit 坐标系相反）；40ms 定时轮询鼠标显示悬停气泡；数据源 `MonitorController.dailyUsageForLastDays(7)`，历史保留 10 天。
 
 ### 已知事项
