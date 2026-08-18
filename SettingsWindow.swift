@@ -282,7 +282,8 @@ final class SettingsWindowController: NSObject {
         let label = NSTextField(labelWithString: "")
         label.alignment = .right
         label.translatesAutoresizingMaskIntoConstraints = false
-        label.widthAnchor.constraint(equalToConstant: width).isActive = true
+        // 至少 width 宽，但内容更长时自动扩展，避免文字与输入框重叠
+        label.widthAnchor.constraint(greaterThanOrEqualToConstant: width).isActive = true
         return label
     }
 
