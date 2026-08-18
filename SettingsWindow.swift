@@ -6,6 +6,9 @@ final class SettingsWindowController: NSObject {
     private let scrollView = NSScrollView()
     private let documentView = NSView()
     private let stack = NSStackView()
+    /// 底部固定按钮栏（不随内容滚动）
+    private let bottomBar = NSView()
+    private let bottomButtonRow = NSStackView()
 
     private var intervalField: NSTextField!
     private var defaultThresholdField: NSTextField!
@@ -58,6 +61,8 @@ final class SettingsWindowController: NSObject {
 
     private func setupScroll() {
         guard let content = window.contentView else { return }
+
+        // —— 滚动内容区 ——
         scrollView.translatesAutoresizingMaskIntoConstraints = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
@@ -72,11 +77,49 @@ final class SettingsWindowController: NSObject {
         stack.translatesAutoresizingMaskIntoConstraints = false
         documentView.addSubview(stack)
 
+        // —— 底部固定按钮栏 ——
+        bottomBar.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(bottomBar)
+
+        let topBorder = NSBox()
+        topBorder.boxType = .separator
+        topBorder.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar.addSubview(topBorder)
+
+        bottomButtonRow.orientation = .horizontal
+        bottomButtonRow.spacing = 8
+        bottomButtonRow.translatesAutoresizingMaskIntoConstraints = false
+        bottomBar.addSubview(bottomButtonRow)
+
+        let applyButton = NSButton(title: "应用", target: self, action: #selector(apply))
+        applyButton.bezelStyle = .rounded
+        let saveButton = NSButton(title: "保存", target: self, action: #selector(save))
+        saveButton.bezelStyle = .rounded
+        saveButton.keyEquivalent = "\r"
+        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancel))
+        cancelButton.bezelStyle = .rounded
+        bottomButtonRow.addArrangedSubview(applyButton)
+        bottomButtonRow.addArrangedSubview(saveButton)
+        bottomButtonRow.addArrangedSubview(cancelButton)
+
         NSLayoutConstraint.activate([
             scrollView.topAnchor.constraint(equalTo: content.topAnchor),
             scrollView.leadingAnchor.constraint(equalTo: content.leadingAnchor),
             scrollView.trailingAnchor.constraint(equalTo: content.trailingAnchor),
-            scrollView.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            scrollView.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
+
+            // 底部栏固定在窗口底部
+            bottomBar.leadingAnchor.constraint(equalTo: content.leadingAnchor),
+            bottomBar.trailingAnchor.constraint(equalTo: content.trailingAnchor),
+            bottomBar.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+            bottomBar.heightAnchor.constraint(equalToConstant: 56),
+
+            topBorder.topAnchor.constraint(equalTo: bottomBar.topAnchor),
+            topBorder.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor),
+            topBorder.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor),
+
+            bottomButtonRow.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
+            bottomButtonRow.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -16),
 
             documentView.leadingAnchor.constraint(equalTo: scrollView.contentView.leadingAnchor),
             documentView.trailingAnchor.constraint(equalTo: scrollView.contentView.trailingAnchor),
@@ -161,18 +204,7 @@ final class SettingsWindowController: NSObject {
         updateStatusLabel.font = NSFont.systemFont(ofSize: 11)
         updateStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(updateStatusLabel)
-
-        stack.addArrangedSubview(makeSeparator())
-
-        // —— 底部按钮 ——
-        let applyButton = NSButton(title: "应用", target: self, action: #selector(apply))
-        applyButton.bezelStyle = .rounded
-        let saveButton = NSButton(title: "保存", target: self, action: #selector(save))
-        saveButton.bezelStyle = .rounded
-        saveButton.keyEquivalent = "\r"
-        let cancelButton = NSButton(title: "取消", target: self, action: #selector(cancel))
-        cancelButton.bezelStyle = .rounded
-        stack.addArrangedSubview(row(with: [applyButton, saveButton, cancelButton]))
+        // 底部按钮已固定在窗口底部栏，不在此处
     }
 
     private func makeSiteSection(index: Int, site: Site) -> NSView {
