@@ -193,11 +193,10 @@ final class SettingsWindowController: NSObject {
         case .weekly: freqPopup.selectItem(at: 3)
         }
         self.updateFreqPopup = freqPopup
-        stack.addArrangedSubview(row(with: [freqLabel, freqPopup]))
 
         let checkButton = NSButton(title: "立即检查更新", target: self, action: #selector(checkUpdate))
         checkButton.bezelStyle = .rounded
-        stack.addArrangedSubview(checkButton)
+        stack.addArrangedSubview(row(with: [freqLabel, freqPopup, checkButton]))
 
         updateStatusLabel.stringValue = ""
         updateStatusLabel.textColor = .secondaryLabelColor
