@@ -77,10 +77,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 近 7 日用量折线图（视图项，宽度按菜单内容自适应，折线横向居中）
-        let chartWidth = max(menuContentWidth() + 28, 220)
+        // 近 7 日用量折线图（宽度对齐菜单内容宽度，视觉居中；高度紧凑）
         let chartItem = NSMenuItem()
-        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7), width: chartWidth)
+        chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7),
+                                             width: menuChartWidth())
         menu.addItem(chartItem)
         menu.addItem(.separator())
 
@@ -158,19 +158,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return (status, "上次检查 \(lastTime)")
     }
 
-    /// 菜单内容中最宽的一行的渲染宽度（用于让折线图与菜单等宽、横向居中）
-    private func menuContentWidth() -> CGFloat {
-        var w: CGFloat = 0
-        let h = headerLines()
-        w = max(w, (h.0 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13, weight: .semibold)]).width)
-        w = max(w, (h.1 as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 11)]).width)
-        for site in controller.config.sites where site.enabled {
-            w = max(w, siteRowAttributedTitle(site: site).size().width)
-        }
-        w = max(w, ("版本 v\(Updater.installedVersion())" as NSString).size(withAttributes: [.font: NSFont.systemFont(ofSize: 13)]).width)
-        return w
-    }
-
     /// 两行富文本：第一行平台+余额（中粗），第二行本日/本月/更新时间（小号次级色）
     private func twoLine(_ line1: String, _ line2: String, weight: NSFont.Weight = .regular) -> NSAttributedString {
         let para = NSMutableParagraphStyle()
@@ -227,6 +214,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     private func fmt(_ format: String, _ value: Double) -> String {
         String(format: format, value)
+    }
+
+    /// 计算菜单内容宽度（取所有文字行的最宽值 + 内边距），让折线图与弹窗同宽、视觉居中
+    private func menuChartWidth() -> CGFloat {
+        func textWidth(_ s: String, _ size: CGFloat) -> CGFloat {
+            NSAttributedString(string: s,
+                               attributes: [.font: NSFont.systemFont(ofSize: size)]).size().width
+        }
+        var maxW: CGFloat = 0
+        let (h1, h2) = headerLines()
+        maxW = max(maxW, textWidth(h1, 13), textWidth(h2, 11))
+        for site in controller.config.sites where site.enabled {
+            maxW = max(maxW, siteRowAttributedTitle(site: site).size().width)
+        }
+        maxW = max(maxW, textWidth("版本 v\(Updater.installedVersion())", 13))
+        maxW = max(maxW, textWidth("检查更新…", 13))
+        // 菜单项左右内边距约 40pt
+        return max(240, maxW + 40)
     }
 
     // MARK: - 动作
