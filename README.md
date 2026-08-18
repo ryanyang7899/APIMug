@@ -9,7 +9,15 @@
 | `deepseek`（DeepSeek 官方） | `GET {base}/user/balance` | 余额（¥） |
 | `newapi`（OpenAI / NewAPI 兼容） | `GET {base}/v1/dashboard/billing/subscription` + `/usage` | 今日用量、本月用量、额度上限（$） |
 
-功能：多站点监测、菜单栏聚合显示、**本日/本月用量统计（余额基准法）**、低余额通知（按天去重）、定时自动刷新（默认 30 分钟）、设置窗口、配置持久化（UserDefaults）。
+功能：多站点监测、菜单栏聚合显示、**本日/本月用量统计（余额基准法）**、低余额通知（按天去重）、定时自动刷新（默认 30 分钟）、设置窗口、**检查更新**、配置持久化（UserDefaults）。
+
+## 检查更新
+
+- 应用启动时按设置频率自动检查 GitHub 最新 Release（默认每次启动，可在 设置 → 更新 改为 关闭/每天/每周）
+- 发现新版本 → 菜单栏出现「⬆ 发现新版本 vX — 前往下载」+ 系统通知（点击通知直接打开下载页）
+- 菜单栏「检查更新…」可手动触发；支持「忽略此版本」
+- 版本对比：读取 Info.plist `CFBundleShortVersionString`，与 GitHub tag（如 `v1.0.0`）语义化比较
+- 自测：`APIMug --update [版本号]` 打印检查结果
 
 ## 本日/本月用量规则
 
@@ -59,6 +67,23 @@ build/APIMug.app/Contents/MacOS/APIMug --test deepseek https://api.deepseek.com 
 ```sh
 python3 test/fake_newapi.py 8787   # 本地模拟 NewAPI 接口
 ```
+
+## 发布新版本
+
+```sh
+cd /Users/ryan/APIMug
+# 1. 提交代码
+git add -A && git commit -m "v1.1.0: 更新说明"
+# 2. 打 tag
+git tag v1.1.0
+# 3. 构建（自动安装到 /Applications）
+./build.sh 1.1.0
+# 4. 打包并发布
+ditto -c -k --sequesterRsrc --keepParent build/APIMug.app build/APIMug-v1.1.0-macOS.zip
+gh release create v1.1.0 build/APIMug-v1.1.0-macOS.zip --title "v1.1.0" --notes "更新内容" --target main
+```
+
+> 注意：`build.sh [版本号]` 会把 `CFBundleShortVersionString` 设为该版本号，**必须与 tag 一致**，否则更新检查会误判。
 
 ## 说明
 

@@ -1,16 +1,35 @@
+import AppKit
 import Foundation
 import UserNotifications
 
-final class NotificationManager {
+final class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     static let shared = NotificationManager()
 
     private let center = UNUserNotificationCenter.current()
 
-    private init() {}
+    override private init() {
+        super.init()
+        center.delegate = self
+    }
 
     /// 启动时请求通知授权（只会弹一次系统框）
     func requestAuthorizationIfNeeded() {
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
+    }
+
+    /// 有新版本时通知（按版本去重，每个版本只提醒一次）
+    func notifyUpdateAvailable(version: String, url: URL) {
+        if version == ConfigStore.lastNotifiedVersion { return }
+        ConfigStore.lastNotifiedVersion = version
+
+        let content = UNMutableNotificationContent()
+        content.title = "发现新版本 v\(version)"
+        content.body = "APIMug 有新版本可用，点击前往下载"
+        content.sound = .default
+        content.userInfo = ["url": url.absoluteString]
+        let request = UNNotificationRequest(identifier: "update-\(version)",
+                                            content: content, trigger: nil)
+        center.add(request) { _ in }
     }
 
     /// 低余额提醒，按天去重（同一站点同一天只提醒一次）
@@ -38,5 +57,25 @@ final class NotificationManager {
         content.sound = .default
         let request = UNNotificationRequest(identifier: id, content: content, trigger: nil)
         center.add(request) { _ in }
+    }
+
+    // MARK: - UNUserNotificationCenterDelegate
+
+    /// 前台也显示横幅（菜单栏应用平时在后台，保险起见仍实现）
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                willPresent notification: UNNotification,
+                                withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
+    }
+
+    /// 点击通知 → 打开对应 URL（如 GitHub Release 页）
+    func userNotificationCenter(_ center: UNUserNotificationCenter,
+                                didReceive response: UNNotificationResponse,
+                                withCompletionHandler completionHandler: @escaping () -> Void) {
+        let userInfo = response.notification.request.content.userInfo
+        if let urlString = userInfo["url"] as? String, let url = URL(string: urlString) {
+            NSWorkspace.shared.open(url)
+        }
+        completionHandler()
     }
 }

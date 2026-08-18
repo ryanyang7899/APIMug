@@ -8,6 +8,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var controller: MonitorController!
     private var settingsController: SettingsWindowController?
 
+    // 更新检查状态
+    private var updateInfo: UpdateInfo?
+    private var isUpdating = false
+    private var lastManualCheckResult: String?
+
     /// 入口：先处理 --test 无头自测分支，否则启动菜单栏应用。
     /// 不能用 NSApplicationMain（需要 MainMenu.nib），用自定义 @main。
     static func main() {
@@ -17,6 +22,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         if args.count >= 2, args[1] == "--sim" {
             CLI.runSim()
+        }
+        if args.count >= 2, args[1] == "--update" {
+            CLI.runUpdateCheck(simulatedVersion: args.count >= 3 ? args[2] : nil)
         }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
@@ -38,6 +46,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.start()
 
         NotificationManager.shared.requestAuthorizationIfNeeded()
+
+        // 按设置频率自动检查更新（后台）
+        if Updater.shouldAutoCheck(config: controller.config) {
+            Task { await runUpdateCheck(manual: false) }
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -73,6 +86,33 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 item.isEnabled = false
                 menu.addItem(item)
             }
+        }
+
+        menu.addItem(.separator())
+
+        // —— 版本与更新 ——
+        let versionRow = NSMenuItem(title: "版本 v\(Updater.installedVersion())", action: nil, keyEquivalent: "")
+        versionRow.isEnabled = false
+        menu.addItem(versionRow)
+
+        if let info = updateInfo, info.latestVersion != ConfigStore.ignoredVersion {
+            let download = NSMenuItem(title: "⬆ 发现新版本 v\(info.latestVersion) — 前往下载",
+                                      action: #selector(openUpdateURL(_:)), keyEquivalent: "")
+            menu.addItem(download)
+
+            let ignore = NSMenuItem(title: "忽略此版本 v\(info.latestVersion)",
+                                    action: #selector(ignoreUpdate(_:)), keyEquivalent: "")
+            menu.addItem(ignore)
+        }
+
+        let checkUpdate = NSMenuItem(title: "检查更新…", action: #selector(checkForUpdates(_:)), keyEquivalent: "u")
+        checkUpdate.keyEquivalentModifierMask = [.command]
+        menu.addItem(checkUpdate)
+
+        if let result = lastManualCheckResult {
+            let resultRow = NSMenuItem(title: result, action: nil, keyEquivalent: "")
+            resultRow.isEnabled = false
+            menu.addItem(resultRow)
         }
 
         menu.addItem(.separator())
@@ -156,12 +196,60 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sc.onSave = { [weak self] newConfig in
             self?.controller.setConfig(newConfig)
         }
+        sc.onCheckUpdate = { [weak self] in
+            self?.checkForUpdates(nil)
+        }
         settingsController = sc
         sc.show()
     }
 
     @objc private func quitApp(_ sender: Any?) {
         NSApplication.shared.terminate(nil)
+    }
+
+    // MARK: - 更新检查
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        Task { await runUpdateCheck(manual: true) }
+    }
+
+    @objc private func openUpdateURL(_ sender: Any?) {
+        guard let info = updateInfo else { return }
+        NSWorkspace.shared.open(info.releaseURL)
+    }
+
+    @objc private func ignoreUpdate(_ sender: Any?) {
+        guard let info = updateInfo else { return }
+        ConfigStore.ignoredVersion = info.latestVersion
+        updateInfo = nil
+        lastManualCheckResult = "已忽略 v\(info.latestVersion)"
+        rebuildMenu()
+    }
+
+    private func runUpdateCheck(manual: Bool) async {
+        guard !isUpdating else { return }
+        isUpdating = true
+        defer { isUpdating = false }
+        ConfigStore.lastUpdateCheck = Date()
+
+        do {
+            if let info = try await Updater.check() {
+                if info.latestVersion != ConfigStore.ignoredVersion {
+                    updateInfo = info
+                    NotificationManager.shared.notifyUpdateAvailable(version: info.latestVersion, url: info.releaseURL)
+                }
+                lastManualCheckResult = nil
+            } else {
+                updateInfo = nil
+                lastManualCheckResult = manual ? "已是最新版本 v\(Updater.installedVersion())" : nil
+            }
+        } catch {
+            updateInfo = nil
+            lastManualCheckResult = manual ? "检查更新失败（\(error)）" : nil
+        }
+
+        settingsController?.showUpdateStatus(lastManualCheckResult ?? "")
+        rebuildMenu()
     }
 }
 
@@ -224,5 +312,28 @@ enum CLI {
                          (t.monthUsage > 0 ? "¥\(t.monthUsage)" : "¥0") as NSString))
         }
         exit(0)
+    }
+
+    /// 更新检查自测：--update [模拟版本号]
+    static func runUpdateCheck(simulatedVersion: String?) -> Never {
+        let sem = DispatchSemaphore(value: 0)
+        Task.detached {
+            let installed = simulatedVersion ?? Updater.installedVersion()
+            print("本机版本: v\(installed)")
+            do {
+                if let info = try await Updater.check(installed: installed) {
+                    print("最新版本: v\(info.latestVersion)")
+                    print("发布页: \(info.releaseURL.absoluteString)")
+                    print("是否更新: \(Updater.isNewer(info.latestVersion, than: installed) ? "是 ✅" : "否")")
+                } else {
+                    print("最新版本: 已是最新（或无新 Release）")
+                }
+            } catch {
+                print("ERROR: \(error)")
+            }
+            exit(0)
+        }
+        sem.wait()
+        fatalError("unreachable")
     }
 }

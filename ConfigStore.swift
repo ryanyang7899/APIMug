@@ -75,4 +75,25 @@ enum ConfigStore {
         dict[id.uuidString] = day
         defaults.set(dict, forKey: alertDaysKey)
     }
+
+    // MARK: - 更新检查状态
+
+    static let lastUpdateCheckKey = "lastUpdateCheck"
+    static let ignoredVersionKey = "ignoredVersion"
+    static let lastNotifiedVersionKey = "lastNotifiedVersion"
+
+    static var lastUpdateCheck: Date? {
+        get { defaults.object(forKey: lastUpdateCheckKey) as? Date }
+        set { defaults.set(newValue, forKey: lastUpdateCheckKey) }
+    }
+
+    static var ignoredVersion: String? {
+        get { defaults.string(forKey: ignoredVersionKey) }
+        set { defaults.set(newValue, forKey: ignoredVersionKey) }
+    }
+
+    static var lastNotifiedVersion: String? {
+        get { defaults.string(forKey: lastNotifiedVersionKey) }
+        set { defaults.set(newValue, forKey: lastNotifiedVersionKey) }
+    }
 }

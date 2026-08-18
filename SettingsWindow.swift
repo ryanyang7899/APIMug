@@ -12,6 +12,8 @@ final class SettingsWindowController: NSObject {
     private var balanceCheck: NSButton!
     private var todayUsageCheck: NSButton!
     private var monthUsageCheck: NSButton!
+    private var updateFreqPopup: NSPopUpButton!
+    private let updateStatusLabel = NSTextField(labelWithString: "")
 
     private struct SiteRowControls {
         let name: NSTextField
@@ -25,6 +27,7 @@ final class SettingsWindowController: NSObject {
 
     private var config: AppConfig
     var onSave: ((AppConfig) -> Void)?
+    var onCheckUpdate: (() -> Void)?
 
     init(config: AppConfig) {
         self.config = config
@@ -131,6 +134,34 @@ final class SettingsWindowController: NSObject {
         let addButton = NSButton(title: "+ 添加站点", target: self, action: #selector(addSite))
         addButton.bezelStyle = .rounded
         stack.addArrangedSubview(addButton)
+        stack.addArrangedSubview(makeSeparator())
+
+        // —— 更新 ——
+        stack.addArrangedSubview(makeSectionLabel("更新"))
+
+        let freqLabel = makeLabel(width: 110)
+        freqLabel.stringValue = "检查更新频率"
+        let freqPopup = NSPopUpButton()
+        freqPopup.addItems(withTitles: ["关闭", "每次启动", "每天", "每周"])
+        switch config.updateCheckFrequency ?? .launch {
+        case .never: freqPopup.selectItem(at: 0)
+        case .launch: freqPopup.selectItem(at: 1)
+        case .daily: freqPopup.selectItem(at: 2)
+        case .weekly: freqPopup.selectItem(at: 3)
+        }
+        self.updateFreqPopup = freqPopup
+        stack.addArrangedSubview(row(with: [freqLabel, freqPopup]))
+
+        let checkButton = NSButton(title: "立即检查更新", target: self, action: #selector(checkUpdate))
+        checkButton.bezelStyle = .rounded
+        stack.addArrangedSubview(checkButton)
+
+        updateStatusLabel.stringValue = ""
+        updateStatusLabel.textColor = .secondaryLabelColor
+        updateStatusLabel.font = NSFont.systemFont(ofSize: 11)
+        updateStatusLabel.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(updateStatusLabel)
+
         stack.addArrangedSubview(makeSeparator())
 
         // —— 底部按钮 ——
@@ -250,6 +281,12 @@ final class SettingsWindowController: NSObject {
         config.showBalanceInMenuBar = balanceCheck.state == .on
         config.showTodayUsageInMenuBar = todayUsageCheck.state == .on
         config.showMonthUsageInMenuBar = monthUsageCheck.state == .on
+        switch updateFreqPopup.indexOfSelectedItem {
+        case 0: config.updateCheckFrequency = .never
+        case 2: config.updateCheckFrequency = .daily
+        case 3: config.updateCheckFrequency = .weekly
+        default: config.updateCheckFrequency = .launch
+        }
         for (i, c) in rowControls.enumerated() where i < config.sites.count {
             config.sites[i].name = c.name.stringValue.trimmingCharacters(in: .whitespaces)
             config.sites[i].enabled = c.enabled.state == .on
@@ -281,6 +318,16 @@ final class SettingsWindowController: NSObject {
     @objc private func apply() {
         collectFields()
         onSave?(config)
+    }
+
+    /// 立即检查更新（触发后结果由 showUpdateStatus 反馈）
+    @objc private func checkUpdate() {
+        onCheckUpdate?()
+    }
+
+    /// 更新检查结果反馈到设置窗口
+    func showUpdateStatus(_ text: String) {
+        updateStatusLabel.stringValue = text
     }
 
     /// 保存：保存设置并关闭窗口

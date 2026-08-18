@@ -3,6 +3,16 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# 参数：--no-launch 跳过启动；[版本号] 覆盖 CFBundleShortVersionString（默认 1.0.0）
+NO_LAUNCH=0
+VERSION="1.0.0"
+for arg in "$@"; do
+  case "$arg" in
+    --no-launch) NO_LAUNCH=1 ;;
+    *) VERSION="$arg" ;;
+  esac
+done
+
 APP=APIMug
 BUNDLE="build/$APP.app"
 
@@ -14,11 +24,11 @@ swiftc -O \
   -parse-as-library -swift-version 5 -target arm64-apple-macosx14.0 \
   -framework AppKit -framework UserNotifications \
   Models.swift ConfigStore.swift APIService.swift \
-  NotificationManager.swift MonitorController.swift SettingsWindow.swift AppDelegate.swift \
+  NotificationManager.swift MonitorController.swift SettingsWindow.swift AppDelegate.swift Updater.swift \
   -o "$BUNDLE/Contents/MacOS/$APP"
 
 echo "==> 写 Info.plist..."
-cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
+cat > "$BUNDLE/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -31,7 +41,7 @@ cat > "$BUNDLE/Contents/Info.plist" <<'PLIST'
   <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
   <key>CFBundleName</key><string>API Mug</string>
   <key>CFBundlePackageType</key><string>APPL</string>
-  <key>CFBundleShortVersionString</key><string>1.0</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
   <key>CFBundleVersion</key><string>1</string>
   <key>LSMinimumSystemVersion</key><string>14.0</string>
   <key>LSUIElement</key><true/>
@@ -49,8 +59,8 @@ if [[ -f "$SRC_ICON" ]]; then
   for spec in "16 icon_16x16" "32 icon_16x16@2x" "32 icon_32x32" "64 icon_32x32@2x" \
               "128 icon_128x128" "256 icon_128x128@2x" "256 icon_256x256" \
               "512 icon_256x256@2x" "512 icon_512x512" "1024 icon_512x512@2x"; do
-    set -- $spec
-    sips -z "$1" "$1" "$SRC_ICON" --out "$ICONSET/$2.png" >/dev/null 2>&1
+    read -r size name <<< "$spec"
+    sips -z "$size" "$size" "$SRC_ICON" --out "$ICONSET/$name.png" >/dev/null 2>&1
   done
   iconutil -c icns "$ICONSET" -o "$BUNDLE/Contents/Resources/AppIcon.icns"
   echo "已生成 AppIcon.icns"
@@ -65,13 +75,15 @@ echo "==> 完成：$BUNDLE"
 codesign -dv "$BUNDLE" 2>&1 | grep -E "Identifier|Signature" || true
 
 echo "==> 安装到 /Applications..."
+killall APIMug 2>/dev/null || true
 rm -rf /Applications/APIMug.app
 cp -R "$BUNDLE" /Applications/APIMug.app
 codesign --force --deep --sign - /Applications/APIMug.app 2>/dev/null
+# 刷新 LaunchServices 注册，避免替换后 open 找不到应用
+/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -f /Applications/APIMug.app 2>/dev/null || true
 
-if [[ "${1:-}" != "--no-launch" ]]; then
+if [[ "$NO_LAUNCH" -eq 0 ]]; then
   echo "==> 重启应用..."
-  killall APIMug 2>/dev/null || true
   open /Applications/APIMug.app
   echo "Launched /Applications/APIMug.app"
 fi

@@ -31,6 +31,8 @@ struct AppConfig: Codable {
     var showTodayUsageInMenuBar: Bool?
     /// 菜单栏是否显示本月用量（nil = 不显示）
     var showMonthUsageInMenuBar: Bool?
+    /// 更新检查频率（nil = 每次启动）
+    var updateCheckFrequency: UpdateFrequency?
 }
 
 /// 某站点最近一次检查的结果（持久化，供菜单与聚合显示）
