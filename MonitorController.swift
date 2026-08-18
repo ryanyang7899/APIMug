@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 
 /// 刷新编排 + 定时器 + 低余额判定 + 聚合标题
@@ -126,49 +127,60 @@ final class MonitorController {
         }
     }
 
-    /// 状态栏短标题：按各站点自己的「菜单栏显示」开关拼装，每项带站点名首字符标注
-    func aggregateShortTitle() -> String {
+    /// 状态栏短标题（富文本）：按各站点自己的「菜单栏显示」开关拼装，
+    /// 站点名首字符加粗，一眼区分是哪个站点的数据。
+    func aggregateShortTitle() -> NSAttributedString {
         let enabledSites = config.sites.filter { $0.enabled }
+        let normal: [NSAttributedString.Key: Any] = [.font: NSFont.systemFont(ofSize: 13)]
+        let bold: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: 13)]
 
         // 警告前缀（⚠ 报错 / ! 低余额），与数据并列显示，不覆盖
-        var prefix = ""
-        if enabledSites.contains(where: { snapshots[$0.id]?.ok == false }) {
-            prefix += "⚠︎ "
-        }
+        let anyError = enabledSites.contains(where: { snapshots[$0.id]?.ok == false })
         let anyLow = enabledSites.contains { site in
             guard let snap = snapshots[site.id], let b = snap.balance else { return false }
             let t = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : config.defaultLowBalanceThreshold
             return b < t
         }
-        if anyLow { prefix += "! " }
 
         func money(_ v: Double) -> String {
             AppFormatters.money.string(from: NSNumber(value: v)) ?? "0"
         }
 
-        var parts: [String] = []
+        var prefix = ""
+        if anyError { prefix += "⚠︎ " }
+        if anyLow { prefix += "! " }
+
+        // 各站点要显示的片段：(首字符, 其余文字)
+        var segments: [(tag: String, rest: String)] = []
         for site in enabledSites {
             guard let snap = snapshots[site.id], snap.ok else { continue }
             let tag = String(site.name.prefix(1))                       // 站点名首字符
             let symbol = site.provider.displayCurrency == "CNY" ? "¥" : "$"
             if site.showBalanceInMenuBar ?? false, let b = snap.balance {
-                parts.append("\(tag) \(symbol)\(money(b))")
+                segments.append((tag, " \(symbol)\(money(b))"))
             }
             if site.showTodayUsageInMenuBar ?? false {
                 let v = site.provider.usesBalanceTracking ? (snap.tracking?.dayUsage ?? 0) : (snap.usedToday ?? 0)
-                parts.append("\(tag) 今日 \(symbol)\(money(v))")
+                segments.append((tag, " 今日 \(symbol)\(money(v))"))
             }
             if site.showMonthUsageInMenuBar ?? false {
                 let v = site.provider.usesBalanceTracking ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0)
-                parts.append("\(tag) 本月 \(symbol)\(money(v))")
+                segments.append((tag, " 本月 \(symbol)\(money(v))"))
             }
         }
 
-        if parts.isEmpty {
-            // 没有任何站点被选中显示 → 保留警告前缀，否则 ☕
-            return prefix.isEmpty ? "☕" : prefix + "☕"
+        let result = NSMutableAttributedString()
+        result.append(NSAttributedString(string: prefix, attributes: normal))
+        if segments.isEmpty {
+            result.append(NSAttributedString(string: "☕", attributes: normal))
+            return result
         }
-        return prefix + parts.joined(separator: " · ")
+        for (i, seg) in segments.enumerated() {
+            if i > 0 { result.append(NSAttributedString(string: " · ", attributes: normal)) }
+            result.append(NSAttributedString(string: seg.tag, attributes: bold))
+            result.append(NSAttributedString(string: seg.rest, attributes: normal))
+        }
+        return result
     }
 
     func scheduleTimer() {

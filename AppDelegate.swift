@@ -125,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // 菜单正在显示时修改会崩溃（AppKit 不允许 tracking 期间改动），仅更新标题；
         // 下次打开前会在 menuWillOpen 中强制重建，保证内容最新。
         guard force || !menuIsOpen else {
-            statusItem.button?.title = controller.aggregateShortTitle()
+            statusItem.button?.attributedTitle = controller.aggregateShortTitle()
             return
         }
         menu.removeAllItems()
@@ -157,7 +157,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         addSiteRows(to: menu)
         addBottomItems(to: menu)
 
-        statusItem.button?.title = controller.aggregateShortTitle()
+        statusItem.button?.attributedTitle = controller.aggregateShortTitle()
     }
 
     /// 头部两行 + 分隔线
