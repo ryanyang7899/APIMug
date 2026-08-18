@@ -3,9 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# 参数：--no-launch 跳过启动；[版本号] 覆盖 CFBundleShortVersionString（默认 1.1.0）
+# 参数：--no-launch 跳过启动；[版本号] 覆盖 CFBundleShortVersionString（默认 1.1.1）
 NO_LAUNCH=0
-VERSION="1.1.0"
+VERSION="1.1.1"
 for arg in "$@"; do
   case "$arg" in
     --no-launch) NO_LAUNCH=1 ;;
