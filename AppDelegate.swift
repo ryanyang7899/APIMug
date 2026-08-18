@@ -77,10 +77,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(header)
         menu.addItem(.separator())
 
-        // 近 7 日用量折线图（宽度对齐菜单内容宽度，视觉居中；高度紧凑）
+        // 近 7 日用量折线图（宽度对齐菜单内容宽度，视觉居中；高度紧凑；悬停显示当日用量）
         let chartItem = NSMenuItem()
+        let hasCNY = controller.config.sites.contains { $0.provider.displayCurrency == "CNY" }
         chartItem.view = DailyUsageChartView(data: controller.dailyUsageForLastDays(7),
-                                             width: menuChartWidth())
+                                             width: menuChartWidth(),
+                                             symbol: hasCNY ? "¥" : "$")
         menu.addItem(chartItem)
         menu.addItem(.separator())
 
