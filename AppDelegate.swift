@@ -1,0 +1,228 @@
+import AppKit
+import Darwin
+
+@main
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    private var statusItem: NSStatusItem!
+    private let menu = NSMenu()
+    private var controller: MonitorController!
+    private var settingsController: SettingsWindowController?
+
+    /// 入口：先处理 --test 无头自测分支，否则启动菜单栏应用。
+    /// 不能用 NSApplicationMain（需要 MainMenu.nib），用自定义 @main。
+    static func main() {
+        let args = CommandLine.arguments
+        if args.count >= 5, args[1] == "--test", let provider = ProviderType(rawValue: args[2]) {
+            CLI.runTest(provider: provider, url: args[3], token: args[4])
+        }
+        if args.count >= 2, args[1] == "--sim" {
+            CLI.runSim()
+        }
+        let app = NSApplication.shared
+        app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
+        let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
+        app.delegate = delegate
+        app.run()
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem.button?.title = "…"
+        statusItem.menu = menu
+
+        let config = ConfigStore.loadConfig()
+        controller = MonitorController(config: config)
+        controller.onStateChange = { [weak self] in
+            self?.rebuildMenu()
+        }
+        controller.start()
+
+        NotificationManager.shared.requestAuthorizationIfNeeded()
+    }
+
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
+        false
+    }
+
+    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
+        true
+    }
+
+    // MARK: - 菜单
+
+    private func rebuildMenu() {
+        menu.removeAllItems()
+
+        // 汇总头部
+        let header = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+        header.isEnabled = false
+        header.attributedTitle = NSAttributedString(string: headerTitle(),
+                                                    attributes: [.font: NSFont.boldSystemFont(ofSize: 13)])
+        menu.addItem(header)
+        menu.addItem(.separator())
+
+        // 每站点一行
+        let enabledSites = controller.config.sites.filter { $0.enabled }
+        if enabledSites.isEmpty {
+            let empty = NSMenuItem(title: "未启用任何站点，请在设置中添加", action: nil, keyEquivalent: "")
+            empty.isEnabled = false
+            menu.addItem(empty)
+        } else {
+            for site in enabledSites {
+                let item = NSMenuItem(title: siteRowTitle(site: site), action: nil, keyEquivalent: "")
+                item.isEnabled = false
+                menu.addItem(item)
+            }
+        }
+
+        menu.addItem(.separator())
+
+        let refresh = NSMenuItem(title: "立即刷新", action: #selector(refreshNow(_:)), keyEquivalent: "r")
+        refresh.keyEquivalentModifierMask = [.command]
+        menu.addItem(refresh)
+
+        let settings = NSMenuItem(title: "设置…", action: #selector(openSettings(_:)), keyEquivalent: ",")
+        settings.keyEquivalentModifierMask = [.command]
+        menu.addItem(settings)
+
+        let quit = NSMenuItem(title: "退出", action: #selector(quitApp(_:)), keyEquivalent: "q")
+        quit.keyEquivalentModifierMask = [.command]
+        menu.addItem(quit)
+
+        statusItem.button?.title = controller.aggregateShortTitle()
+    }
+
+    private func headerTitle() -> String {
+        var okCount = 0
+        var errCount = 0
+        for site in controller.config.sites where site.enabled {
+            if let snap = controller.snapshots[site.id] {
+                if snap.ok { okCount += 1 } else { errCount += 1 }
+            }
+        }
+        var parts: [String] = []
+        if errCount > 0 {
+            parts.append("⚠ \(errCount) 个站点异常")
+        } else {
+            parts.append("全部正常")
+        }
+        let lastTime = controller.snapshots.values.map { $0.checkedAt }.max()
+            .map { AppFormatters.time.string(from: $0) } ?? "—"
+        parts.append("上次检查 \(lastTime)")
+        return parts.joined(separator: " · ")
+    }
+
+    private func siteRowTitle(site: Site) -> String {
+        guard let snap = controller.snapshots[site.id] else {
+            return "○ \(site.name) — 尚未检查"
+        }
+        let mark = snap.ok ? "✓" : "✕"
+        let time = AppFormatters.time.string(from: snap.checkedAt)
+        var info: String
+        if let err = snap.lastError {
+            info = "错误: \(err)"
+        } else if snap.currency == "CNY" {
+            var parts: [String] = [String(format: "余额 ¥%.2f", snap.balance ?? 0)]
+            if let d = snap.tracking?.dayUsage {
+                parts.append(String(format: "本日 ¥%.2f", d))
+            }
+            if let m = snap.tracking?.monthUsage {
+                parts.append(String(format: "本月 ¥%.2f", m))
+            }
+            info = parts.joined(separator: " · ")
+        } else {
+            var parts: [String] = []
+            if let t = snap.usedToday { parts.append(String(format: "今日 $%.2f", t)) }
+            if let m = snap.usedThisMonth { parts.append(String(format: "本月 $%.2f", m)) }
+            if let h = snap.hardLimit { parts.append(String(format: "上限 $%.0f", h)) }
+            info = parts.isEmpty ? "OK" : parts.joined(separator: " · ")
+        }
+        return "\(mark) \(site.name) — \(info) · \(time)"
+    }
+
+    // MARK: - 动作
+
+    @objc private func refreshNow(_ sender: Any?) {
+        controller.refreshNow()
+    }
+
+    @objc private func openSettings(_ sender: Any?) {
+        if let sc = settingsController {
+            sc.updateConfig(controller.config)
+            sc.show()
+            return
+        }
+        let sc = SettingsWindowController(config: controller.config)
+        sc.onSave = { [weak self] newConfig in
+            self?.controller.setConfig(newConfig)
+        }
+        settingsController = sc
+        sc.show()
+    }
+
+    @objc private func quitApp(_ sender: Any?) {
+        NSApplication.shared.terminate(nil)
+    }
+}
+
+// MARK: - CLI 无头自测模式
+// 用法: NewAPIMonitor --test <deepseek|newapi> <baseURL> <token>
+
+enum CLI {
+    static func runTest(provider: ProviderType, url: String, token: String) -> Never {
+        let site = Site(id: UUID(), name: "test", enabled: true, baseURL: url,
+                        apiToken: token, provider: provider, lowBalanceThreshold: 0)
+        let sem = DispatchSemaphore(value: 0)
+        // Task.detached：避免 @MainActor 继承任务与主线程信号量死锁。
+        // 任务内直接 exit() 结束进程；主线程永久阻塞在 sem.wait()，确保任务跑完。
+        Task.detached {
+            do {
+                let result = try await APIService.fetch(site)
+                var parts: [String] = ["ok"]
+                if let b = result.balance {
+                    parts.append(String(format: "balance=%@ %.2f", result.currency ?? "", b))
+                }
+                if let t = result.usedToday { parts.append(String(format: "usedToday=%.2f", t)) }
+                if let m = result.usedThisMonth { parts.append(String(format: "usedThisMonth=%.2f", m)) }
+                if let h = result.hardLimit { parts.append(String(format: "hardLimit=%.0f", h)) }
+                print(parts.joined(separator: " "))
+                exit(0)
+            } catch {
+                print("ERROR: \(error)")
+                exit(2)
+            }
+        }
+        sem.wait()
+        fatalError("unreachable")
+    }
+
+    /// 用量追踪算法自测：跑一组固定余额场景，验证本日/本月基准与累计逻辑
+    static func runSim() -> Never {
+        let fmt = DateFormatter()
+        fmt.dateFormat = "yyyy-MM-dd HH:mm"
+        let steps: [(String, String, Double)] = [
+            ("月首 08:00       ", "2026-08-01 08:00", 100),   // 设基准
+            ("当天 10:00       ", "2026-08-01 10:00", 90),    // 本日+10
+            ("当天 12:00       ", "2026-08-01 12:00", 80),    // 本日+10
+            ("当天 14:00 充值  ", "2026-08-01 14:00", 150),   // 充值→基准升150，用量不清零
+            ("当天 16:00       ", "2026-08-01 16:00", 140),   // 本日+10
+            ("次日 00:05       ", "2026-08-02 00:05", 135),   // 跨天→本日基准重置，本月继续+5
+            ("次日 10:00       ", "2026-08-02 10:00", 120),   // 本日+15
+            ("次月 01:00       ", "2026-09-01 01:00", 200),   // 跨月→本月基准重置
+        ]
+        var t = UsageTracking()
+        print("场景                | 余额 | 本日基准 | 本日用量 | 本月基准 | 本月用量")
+        print("────────────────────┼──────┼─────────┼─────────┼─────────┼─────────")
+        for (label, ds, balance) in steps {
+            guard let date = fmt.date(from: ds) else { continue }
+            UsageTracker.advance(&t, date: date, balance: balance)
+            print(String(format: "%-16@ | ¥%.0f | %8@ | %8@ | %8@ | %8@",
+                         label as NSString, balance,
+                         (t.dayBaseline.map { "¥\($0)" } ?? "—") as NSString,
+                         (t.dayUsage > 0 ? "¥\(t.dayUsage)" : "¥0") as NSString,
+                         (t.monthBaseline.map { "¥\($0)" } ?? "—") as NSString,
+                         (t.monthUsage > 0 ? "¥\(t.monthUsage)" : "¥0") as NSString))
+        }
+        exit(0)
+    }
+}
