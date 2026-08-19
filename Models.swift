@@ -10,8 +10,6 @@ enum ProviderType: String, Codable, CaseIterable {
     case openrouter = "openrouter"
     /// 月之暗面 Kimi：GET {base}/v1/users/me/balance
     case kimi = "kimi"
-    /// 硅基流动 SiliconFlow：GET {base}/v1/user/info
-    case siliconflow = "siliconflow"
     /// 阶跃星辰 StepFun：GET {base}/v1/accounts
     case stepfun = "stepfun"
     /// DeepInfra：GET {base}/payment/checklist
@@ -24,7 +22,6 @@ enum ProviderType: String, Codable, CaseIterable {
         case .newapi: return "OpenAI / NewAPI"
         case .openrouter: return "OpenRouter"
         case .kimi: return "Kimi（月之暗面）"
-        case .siliconflow: return "硅基流动 SiliconFlow"
         case .stepfun: return "阶跃星辰 StepFun"
         case .deepinfra: return "DeepInfra"
         }
@@ -37,7 +34,6 @@ enum ProviderType: String, Codable, CaseIterable {
         case .newapi: return ""
         case .openrouter: return "https://openrouter.ai"
         case .kimi: return "https://api.moonshot.cn"
-        case .siliconflow: return "https://api.siliconflow.cn"
         case .stepfun: return "https://api.stepfun.com"
         case .deepinfra: return "https://api.deepinfra.com"
         }
@@ -46,7 +42,7 @@ enum ProviderType: String, Codable, CaseIterable {
     /// 是否使用「余额基准法」推算本日/本月用量（仅余额型平台）
     var usesBalanceTracking: Bool {
         switch self {
-        case .deepseek, .kimi, .siliconflow, .stepfun, .deepinfra: return true
+        case .deepseek, .kimi, .stepfun, .deepinfra: return true
         case .newapi, .openrouter: return false   // 这两种平台 API 直接返回用量
         }
     }
@@ -54,7 +50,7 @@ enum ProviderType: String, Codable, CaseIterable {
     /// 该平台余额/用量的主要币种
     var displayCurrency: String {
         switch self {
-        case .deepseek, .kimi, .siliconflow, .stepfun: return "CNY"
+        case .deepseek, .kimi, .stepfun: return "CNY"
         case .newapi, .openrouter, .deepinfra: return "USD"
         }
     }
@@ -254,16 +250,6 @@ struct KimiBalanceData: Decodable {
         case cashBalance = "cash_balance"
         case voucherBalance = "voucher_balance"
     }
-}
-
-/// 硅基流动 SiliconFlow：GET /v1/user/info
-struct SiliconFlowUserInfo: Decodable {
-    let data: SiliconFlowUserData
-}
-struct SiliconFlowUserData: Decodable {
-    let balance: FlexibleDouble?        // 赠送余额
-    let chargeBalance: FlexibleDouble?  // 充值余额
-    let totalBalance: FlexibleDouble?   // 总余额
 }
 
 /// 阶跃星辰 StepFun：GET /v1/accounts

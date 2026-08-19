@@ -45,8 +45,6 @@ enum APIService {
             return try await fetchOpenRouter(site)
         case .kimi:
             return try await fetchKimi(site)
-        case .siliconflow:
-            return try await fetchSiliconFlow(site)
         case .stepfun:
             return try await fetchStepFun(site)
         case .deepinfra:
@@ -162,26 +160,6 @@ enum APIService {
         }
         return SiteResult(siteID: site.id,
                           balance: resp.data.availableBalance?.value,
-                          currency: "CNY",
-                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
-                          checkedAt: Date())
-    }
-
-    // MARK: - 硅基流动 SiliconFlow
-
-    private static func fetchSiliconFlow(_ site: Site) async throws -> SiteResult {
-        let url = try makeURL(base: site.baseURL, path: "v1/user/info")
-        let data = try await get(url, token: site.apiToken)
-        let resp: SiliconFlowUserInfo
-        do {
-            resp = try JSONDecoder().decode(SiliconFlowUserInfo.self, from: data)
-        } catch {
-            throw APIError.decode(error)
-        }
-        // totalBalance 优先，回退到 chargeBalance（有的账号只有充值余额字段）
-        let balance = resp.data.totalBalance?.value ?? resp.data.chargeBalance?.value
-        return SiteResult(siteID: site.id,
-                          balance: balance,
                           currency: "CNY",
                           usedToday: nil, usedThisMonth: nil, hardLimit: nil,
                           checkedAt: Date())

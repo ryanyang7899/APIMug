@@ -6,7 +6,6 @@ extension ProviderType {
         switch self {
         case .deepseek:   return .systemBlue
         case .kimi:       return .systemPurple
-        case .siliconflow: return .systemGreen
         case .stepfun:    return .systemOrange
         case .deepinfra:  return .systemTeal
         case .openrouter: return .systemPink

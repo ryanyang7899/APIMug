@@ -2,7 +2,7 @@
 
 原生 Swift + AppKit 菜单栏 API 监测应用（无 Dock 图标，纯代码 UI，无 Xcode）。
 
-支持每站点选择协议类型（7 种，均为「普通 API Key + 一次请求」）：
+支持每站点选择协议类型（6 种，均为「普通 API Key + 一次请求」）：
 
 | 类型 | 接口 | 显示内容 |
 |---|---|---|
@@ -10,11 +10,12 @@
 | `newapi`（OpenAI / NewAPI 网关） | `GET {base}/v1/dashboard/billing/subscription` + `/usage` | 今日/本月用量、额度上限（$） |
 | `openrouter`（OpenRouter） | `GET {base}/api/v1/key` | 余额、今日/本月用量、上限（$） |
 | `kimi`（月之暗面） | `GET {base}/v1/users/me/balance` | 余额（¥，现金+代金券） |
-| `siliconflow`（硅基流动） | `GET {base}/v1/user/info` | 余额（¥） |
 | `stepfun`（阶跃星辰） | `GET {base}/v1/accounts` | 余额（¥） |
 | `deepinfra`（DeepInfra） | `GET {base}/payment/checklist` | 余额、上限（$） |
 
-> 说明：`newapi` 协议适用于自建 new-api / one-api 网关及基于它们的中转站；**OpenAI 官方已封禁普通 Key 访问 billing 接口**，请勿用于 OpenAI 官方。切换协议时设置窗口会自动填入该平台的默认 Base URL。余额型平台（DeepSeek/Kimi/SiliconFlow/StepFun/DeepInfra）自动启用本日/本月用量追踪。
+> 说明：`newapi` 协议适用于自建 new-api / one-api 网关及基于它们的中转站；**OpenAI 官方已封禁普通 Key 访问 billing 接口**，请勿用于 OpenAI 官方。切换协议时设置窗口会自动填入该平台的默认 Base URL。余额型平台（DeepSeek/Kimi/StepFun/DeepInfra）自动启用本日/本月用量追踪。
+
+> 硅基流动（SiliconFlow）因官方停用余额查询接口（`/v1/user/info` 余额字段自 2025-12-25 返回 0），已从支持列表中移除。
 
 功能：多站点监测、菜单栏聚合显示、**本日/本月用量统计（余额基准法）**、低余额通知（按天去重）、定时自动刷新（默认 30 分钟）、设置窗口、**检查更新**、配置持久化（UserDefaults）。
 

@@ -37,6 +37,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.count >= 2, args[1] == "--measure" {
             CLI.runMeasure()            // 测量菜单宽度，校准折线图宽度
         }
+        if args.count >= 2, args[1] == "--configtest" {
+            CLI.runConfigTest()         // 配置加载/迁移自测
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
@@ -519,6 +522,17 @@ enum CLI {
         }
         try? png.write(to: URL(fileURLWithPath: "/tmp/chart.png"))
         print("已导出 /tmp/chart.png")
+        exit(0)
+    }
+
+    /// 配置加载/迁移自测：--configtest
+    /// 验证含已移除平台（如 siliconflow）的旧配置能容错迁移，只打印站点元信息（不泄露 token）。
+    static func runConfigTest() -> Never {
+        let config = ConfigStore.loadConfig()
+        print("刷新间隔 \(config.refreshIntervalMinutes)min · 默认阈值 \(config.defaultLowBalanceThreshold) · 站点 \(config.sites.count) 个")
+        for (i, s) in config.sites.enumerated() {
+            print("site\(i + 1): name=\(s.name) enabled=\(s.enabled) provider=\(s.provider.rawValue) url=\(s.baseURL)")
+        }
         exit(0)
     }
 

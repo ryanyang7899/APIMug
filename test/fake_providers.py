@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""本地假服务器：模拟 OpenRouter / Kimi / SiliconFlow / StepFun / DeepInfra 的余额接口（离线自测用）。"""
+"""本地假服务器：模拟 OpenRouter / Kimi / StepFun / DeepInfra 的余额接口（离线自测用）。"""
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import sys
@@ -21,12 +21,6 @@ class Handler(BaseHTTPRequestHandler):
             body = json.dumps({"code": 0, "data": {
                 "available_balance": 88.66, "voucher_balance": 10.0, "cash_balance": 78.66
             }, "scode": "0", "status": True}).encode()
-        elif self.path.startswith('/v1/user/info'):
-            # SiliconFlow: GET /v1/user/info
-            body = json.dumps({"code": 20000, "message": "Success", "data": {
-                "id": "1", "email": "t@t.com", "balance": 15.0,
-                "chargeBalance": 20.0, "totalBalance": 35.0, "status": "active"
-            }, "metadata": {}}).encode()
         elif self.path.startswith('/v1/accounts'):
             # StepFun: GET /v1/accounts
             body = json.dumps({
