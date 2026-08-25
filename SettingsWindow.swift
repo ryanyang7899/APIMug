@@ -15,6 +15,12 @@ final class SettingsWindowController: NSObject {
     private var updateFreqPopup: NSPopUpButton!
     private let updateStatusLabel = NSTextField(labelWithString: "")
     private var launchAtLoginCheck: NSButton!
+    // 联并千行
+    private var lbqhCheck: NSButton!
+    private var lbqhURLField: NSTextField!
+    private var lbqhKeyField: NSTextField!
+    private var lbqhMenuCheck: NSButton!
+    private var lbqhThresholdField: NSTextField!
 
     private struct SiteRowControls {
         let name: NSTextField
@@ -157,6 +163,48 @@ final class SettingsWindowController: NSObject {
         launchAtLoginCheck.state = LoginItem.isEnabled ? .on : .off
         self.launchAtLoginCheck = launchAtLoginCheck
         stack.addArrangedSubview(launchAtLoginCheck)
+        stack.addArrangedSubview(makeSeparator())
+
+        // —— 联并千行 ——
+        let lbqh = config.lbqh ?? LBQHConfig(enabled: false, baseURL: LBQHConfig.defaultBaseURL,
+                                             apiKey: LBQHConfig.defaultAPIKey,
+                                             showInMenuBar: true, lowBalanceThreshold: 0)
+        let lbqhCheck = NSButton(checkboxWithTitle: "监控联并千行余额", target: nil, action: nil)
+        lbqhCheck.state = lbqh.enabled ? .on : .off
+        self.lbqhCheck = lbqhCheck
+        stack.addArrangedSubview(lbqhCheck)
+
+        let lbqhURLField = NSTextField()
+        lbqhURLField.stringValue = lbqh.baseURL
+        lbqhURLField.translatesAutoresizingMaskIntoConstraints = false
+        lbqhURLField.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        self.lbqhURLField = lbqhURLField
+        let lbqhURLLabel = makeLabel(width: 70)
+        lbqhURLLabel.stringValue = "服务地址"
+        stack.addArrangedSubview(row(with: [lbqhURLLabel, lbqhURLField]))
+
+        let lbqhKeyField = NSSecureTextField()
+        lbqhKeyField.stringValue = lbqh.apiKey
+        lbqhKeyField.translatesAutoresizingMaskIntoConstraints = false
+        lbqhKeyField.widthAnchor.constraint(equalToConstant: 300).isActive = true
+        self.lbqhKeyField = lbqhKeyField
+        let lbqhKeyLabel = makeLabel(width: 70)
+        lbqhKeyLabel.stringValue = "API Key"
+        stack.addArrangedSubview(row(with: [lbqhKeyLabel, lbqhKeyField]))
+
+        let lbqhMenuCheck = NSButton(checkboxWithTitle: "在菜单栏显示余额", target: nil, action: nil)
+        lbqhMenuCheck.state = lbqh.showInMenuBar ? .on : .off
+        self.lbqhMenuCheck = lbqhMenuCheck
+        stack.addArrangedSubview(row(with: [makeLabel(width: 70), lbqhMenuCheck]))
+
+        let lbqhThresholdField = NSTextField()
+        lbqhThresholdField.stringValue = lbqh.lowBalanceThreshold > 0 ? String(format: "%.2f", lbqh.lowBalanceThreshold) : ""
+        lbqhThresholdField.translatesAutoresizingMaskIntoConstraints = false
+        lbqhThresholdField.widthAnchor.constraint(equalToConstant: 90).isActive = true
+        self.lbqhThresholdField = lbqhThresholdField
+        let lbqhThresholdLabel = makeLabel(width: 70)
+        lbqhThresholdLabel.stringValue = "低余额阈值"
+        stack.addArrangedSubview(row(with: [lbqhThresholdLabel, lbqhThresholdField]))
         stack.addArrangedSubview(makeSeparator())
 
         // —— 站点 ——
@@ -339,6 +387,15 @@ final class SettingsWindowController: NSObject {
             config.sites[i].showTodayUsageInMenuBar = c.showToday.state == .on
             config.sites[i].showMonthUsageInMenuBar = c.showMonth.state == .on
         }
+        // 联并千行
+        let lbqhURL = lbqhURLField.stringValue.trimmingCharacters(in: .whitespaces)
+        config.lbqh = LBQHConfig(
+            enabled: lbqhCheck.state == .on,
+            baseURL: lbqhURL.isEmpty ? LBQHConfig.defaultBaseURL : lbqhURL,
+            apiKey: lbqhKeyField.stringValue.trimmingCharacters(in: .whitespaces),
+            showInMenuBar: lbqhMenuCheck.state == .on,
+            lowBalanceThreshold: Double(lbqhThresholdField.stringValue) ?? 0
+        )
     }
 
     // MARK: - 动作

@@ -49,6 +49,8 @@ enum APIService {
             return try await fetchStepFun(site)
         case .deepinfra:
             return try await fetchDeepInfra(site)
+        case .lbqh:
+            return try await fetchLBQH(site)
         }
     }
 
@@ -205,11 +207,48 @@ enum APIService {
                           checkedAt: Date())
     }
 
+    // MARK: - 联并千行 MaaS（本地监控服务）
+
+    /// 联并千行查询：
+    /// - forceUpdate == false：GET {base}/api/balance，返回最新一条余额快照（读缓存，无成本）
+    /// - forceUpdate == true ：POST {base}/api/balance/fetch，同步抓一次（登录+验证码，约 10~20 秒，有成本）
+    /// 只取余额（元），total_spent / month_spent 暂不使用。
+    static func fetchLBQH(_ site: Site, forceUpdate: Bool = false) async throws -> SiteResult {
+        let path = forceUpdate ? "api/balance/fetch" : "api/balance"
+        let url = try makeURL(base: site.baseURL, path: path)
+        var req = URLRequest(url: url)
+        req.httpMethod = forceUpdate ? "POST" : "GET"
+        req.setValue(site.apiToken, forHTTPHeaderField: "X-API-Key")   // lbqh 用 X-API-Key 头
+        req.timeoutInterval = forceUpdate ? 60 : 15
+        let data = try await getWithHeaders(req, session: forceUpdate ? lbqhFetchSession : session)
+        let resp: LBQHBalanceResponse
+        do {
+            resp = try JSONDecoder().decode(LBQHBalanceResponse.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        return SiteResult(siteID: site.id, balance: resp.balance, currency: "CNY",
+                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
+                          checkedAt: Date())
+    }
+
+    /// 立即抓取专用 session：抓取登录+验证码耗时 10~20 秒，需要比默认更宽松的超时
+    private static let lbqhFetchSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - 底层请求
 
     private static func makeURL(base: String, path: String, query: [URLQueryItem] = []) throws -> URL {
         var baseStr = base.trimmingCharacters(in: .whitespacesAndNewlines)
         while baseStr.hasSuffix("/") { baseStr.removeLast() }
+        // 未带 scheme 的地址（如内网 IP "100.66.1.1:8100"）自动补 http://，否则 URLComponents 解析失败报「无效 URL」
+        if !baseStr.contains("://") {
+            baseStr = "http://" + baseStr
+        }
         guard var comps = URLComponents(string: baseStr) else {
             throw APIError.badURL(base)
         }
@@ -223,10 +262,16 @@ enum APIService {
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 15
+        return try await getWithHeaders(req)
+    }
+
+    /// 发送请求并校验状态码（请求头已由调用方设好，含 lbqh 的 X-API-Key）。
+    /// 可传入自定义 session（如 lbqh 立即抓取的长超时 session）。
+    private static func getWithHeaders(_ req: URLRequest, session s: URLSession = session) async throws -> Data {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await s.data(for: req)
         } catch {
             throw APIError.network(error)
         }

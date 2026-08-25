@@ -47,6 +47,11 @@ cat > "$BUNDLE/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <!-- 放行明文 HTTP：连接内网/局域网服务（如联并千行 http://100.66.1.1:8100）时 ATS 会拦截，需豁免 -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key><true/>
+  </dict>
 </dict>
 </plist>
 PLIST
