@@ -8,9 +8,10 @@ PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8788
 
 class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
-        # 联并千行: POST {base}/api/balance/fetch（立即抓取，模拟余额下降）
+        # 联并千行: POST {base}/api/balance/fetch（立即抓取，Bearer 令牌鉴权，模拟余额下降）
         if self.path.startswith('/api/balance/fetch'):
-            if self.headers.get('X-API-Key') != 'lbqh-2026-token':
+            auth = self.headers.get('Authorization', '')
+            if auth != 'Bearer lbqh-2026-token':
                 self.send_response(401)
                 self.end_headers()
                 return
@@ -29,16 +30,25 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         body = None
-        if self.path.startswith('/api/balance'):
-            # 联并千行: GET {base}/api/balance（X-API-Key 鉴权）
-            if self.headers.get('X-API-Key') != 'lbqh-2026-token':
+        if self.path.startswith('/user/balance'):
+            # 联并千行: GET {base}/user/balance（新版，Bearer 令牌鉴权，DeepSeek 风格）
+            auth = self.headers.get('Authorization', '')
+            if auth != 'Bearer lbqh-2026-token':
                 self.send_response(401)
                 self.end_headers()
                 return
             body = json.dumps({
-                "id": 2, "fetched_at": "2026-08-24T08:31:53Z",
-                "balance": 999.35, "total_spent": 0.65, "month_spent": 0.65
+                "is_available": True,
+                "balance_infos": [
+                    {"currency": "CNY", "total_balance": "999.35",
+                     "granted_balance": "0", "topped_up_balance": "0"}
+                ]
             }).encode()
+        elif self.path.startswith('/api/balance'):
+            # 旧版内部接口已废弃，一律 401（用于验证兼容路径）
+            self.send_response(401)
+            self.end_headers()
+            return
         elif self.path.startswith('/api/v1/key'):
             # OpenRouter: GET /api/v1/key
             body = json.dumps({"data": {

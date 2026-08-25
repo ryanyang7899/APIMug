@@ -189,7 +189,7 @@ final class SettingsWindowController: NSObject {
         lbqhKeyField.widthAnchor.constraint(equalToConstant: 300).isActive = true
         self.lbqhKeyField = lbqhKeyField
         let lbqhKeyLabel = makeLabel(width: 70)
-        lbqhKeyLabel.stringValue = "API Key"
+        lbqhKeyLabel.stringValue = "API 令牌"
         stack.addArrangedSubview(row(with: [lbqhKeyLabel, lbqhKeyField]))
 
         let lbqhMenuCheck = NSButton(checkboxWithTitle: "在菜单栏显示余额", target: nil, action: nil)

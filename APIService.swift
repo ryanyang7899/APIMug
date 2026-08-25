@@ -207,27 +207,46 @@ enum APIService {
                           checkedAt: Date())
     }
 
-    // MARK: - 联并千行 MaaS（本地监控服务）
+    // MARK: - 联并千行 MaaS（多用户服务）
 
-    /// 联并千行查询：
-    /// - forceUpdate == false：GET {base}/api/balance，返回最新一条余额快照（读缓存，无成本）
-    /// - forceUpdate == true ：POST {base}/api/balance/fetch，同步抓一次（登录+验证码，约 10~20 秒，有成本）
-    /// 只取余额（元），total_spent / month_spent 暂不使用。
+    /// 联并千行查询（新版接口，鉴权对齐 DeepSeek 的 Bearer 令牌）：
+    /// - forceUpdate == false：GET {base}/user/balance，DeepSeek 风格，读缓存（无成本）
+    /// - forceUpdate == true ：POST {base}/api/balance/fetch 同步抓一次（登录+验证码，约 10~20 秒，有成本），
+    ///                          再 GET {base}/user/balance 取最新余额（fetch 返回的是内部快照，结构不固定）
+    /// 返回结构 /user/balance 与 DeepSeek 一致：{is_available, balance_infos:[{currency, total_balance, ...}]}
     static func fetchLBQH(_ site: Site, forceUpdate: Bool = false) async throws -> SiteResult {
-        let path = forceUpdate ? "api/balance/fetch" : "api/balance"
-        let url = try makeURL(base: site.baseURL, path: path)
+        // 立即刷新：先 POST fetch 触发抓取（同步等待），再用 /user/balance 拿数据
+        if forceUpdate {
+            let fetchURL = try makeURL(base: site.baseURL, path: "api/balance/fetch")
+            var fetchReq = URLRequest(url: fetchURL)
+            fetchReq.httpMethod = "POST"
+            fetchReq.setValue("Bearer \(site.apiToken)", forHTTPHeaderField: "Authorization")
+            fetchReq.timeoutInterval = 60
+            _ = try await getWithHeaders(fetchReq, session: lbqhFetchSession)
+        }
+
+        // 查余额（GET /user/balance）
+        let url = try makeURL(base: site.baseURL, path: "user/balance")
         var req = URLRequest(url: url)
-        req.httpMethod = forceUpdate ? "POST" : "GET"
-        req.setValue(site.apiToken, forHTTPHeaderField: "X-API-Key")   // lbqh 用 X-API-Key 头
-        req.timeoutInterval = forceUpdate ? 60 : 15
-        let data = try await getWithHeaders(req, session: forceUpdate ? lbqhFetchSession : session)
-        let resp: LBQHBalanceResponse
+        req.setValue("Bearer \(site.apiToken)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 15
+        let data = try await getWithHeaders(req)
+        let resp: DeepSeekBalanceResponse
         do {
-            resp = try JSONDecoder().decode(LBQHBalanceResponse.self, from: data)
+            resp = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: data)
         } catch {
             throw APIError.decode(error)
         }
-        return SiteResult(siteID: site.id, balance: resp.balance, currency: "CNY",
+        // 与 DeepSeek 相同：按币种汇总 total_balance（字段是字符串）
+        var balanceByCurrency: [String: Double] = [:]
+        for info in resp.balanceInfos {
+            if let v = Double(info.totalBalance) {
+                balanceByCurrency[info.currency, default: 0] += v
+            }
+        }
+        let currency = balanceByCurrency.keys.sorted().first ?? "CNY"
+        let balance = balanceByCurrency[currency]
+        return SiteResult(siteID: site.id, balance: balance, currency: currency,
                           usedToday: nil, usedThisMonth: nil, hardLimit: nil,
                           checkedAt: Date())
     }

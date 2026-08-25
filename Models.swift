@@ -101,7 +101,7 @@ struct LBQHConfig: Codable {
     var enabled: Bool
     /// 监控服务地址（默认 http://localhost:8100）
     var baseURL: String
-    /// 接口鉴权 Key（X-API-Key 头）
+    /// API 令牌（在服务网页端「API 令牌」页创建，格式 lbqh-<32位hex>，走 Authorization: Bearer 头）
     var apiKey: String
     /// 菜单栏是否显示该余额（聚合标题带首字符「联」）
     var showInMenuBar: Bool
@@ -109,7 +109,7 @@ struct LBQHConfig: Codable {
     var lowBalanceThreshold: Double
 
     static let defaultBaseURL = "http://localhost:8100"
-    static let defaultAPIKey = "lbqh-2026-token"
+    static let defaultAPIKey = ""   // 令牌由用户在服务网页端创建，无法预置默认值
 }
 
 /// 某站点最近一次检查的结果（持久化，供菜单与聚合显示）
@@ -304,19 +304,6 @@ struct DeepInfraChecklist: Decodable {
         case suspended
     }
 }
-
-/// 联并千行 MaaS：GET {base}/api/balance
-struct LBQHBalanceResponse: Decodable {
-    let balance: Double?        // 账户当前余额（元）
-    let totalSpent: Double?     // 累计总支出（元）
-    let monthSpent: Double?     // 本月支出（元）
-    enum CodingKeys: String, CodingKey {
-        case balance
-        case totalSpent = "total_spent"
-        case monthSpent = "month_spent"
-    }
-}
-
 // MARK: - 格式化工具
 
 enum AppFormatters {
