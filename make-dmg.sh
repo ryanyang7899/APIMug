@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-VERSION="${1:-1.2.0}"
+VERSION="${1:-1.2.1}"
 APP="build/APIMug.app"
 if [[ ! -d "$APP" ]]; then
   echo "未找到 $APP，请先运行 ./build.sh $VERSION 构建应用"

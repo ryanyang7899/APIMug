@@ -193,7 +193,7 @@ docker compose up -d --build   # 构建并启动（首次构建较慢，镜像�
 ```sh
 ./build.sh                 # 编译 + 签名 + 重启应用
 ./build.sh --no-launch     # 只构建不启动
-./build.sh 1.2.0           # 指定版本号（须与发布 tag 一致）
+./build.sh 1.2.1           # 指定版本号（须与发布 tag 一致）
 ```
 
 无头自测：`APIMug --test <provider> <url> <token>`、`APIMug --lbqhtest [baseURL] [令牌] [--force]`、`APIMug --sim` 等。
