@@ -75,25 +75,3 @@ build/APIMug.app/Contents/MacOS/APIMug --test deepseek https://api.deepseek.com 
 python3 test/fake_newapi.py 8787   # 本地模拟 NewAPI 接口
 ```
 
-## 发布新版本
-
-```sh
-cd /Users/ryan/APIMug
-# 1. 提交代码
-git add -A && git commit -m "v1.1.0: 更新说明"
-# 2. 打 tag
-git tag v1.1.0
-# 3. 构建（自动安装到 /Applications）
-./build.sh 1.1.0
-# 4. 打包并发布
-ditto -c -k --sequesterRsrc --keepParent build/APIMug.app build/APIMug-v1.1.0-macOS.zip
-gh release create v1.1.0 build/APIMug-v1.1.0-macOS.zip --title "v1.1.0" --notes "更新内容" --target main
-```
-
-> 注意：`build.sh [版本号]` 会把 `CFBundleShortVersionString` 设为该版本号，**必须与 tag 一致**，否则更新检查会误判。
-
-## 说明
-
-- 包 ID 沿用 `com.alfye.NewAPIMonitor`，配置写在 `~/Library/Preferences/com.alfye.NewAPIMonitor.plist`（改名不影响既有配置）。
-- 首次启动会尝试从旧版应用的 `site1_*` 配置迁移，若为空则生成一个禁用占位站点。
-- Apple Silicon 必须 ad-hoc 签名，build.sh 已处理。
