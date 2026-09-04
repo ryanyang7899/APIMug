@@ -5,6 +5,10 @@ import Foundation
 final class MonitorController {
     var onStateChange: (() -> Void)?
 
+    /// 联并千行虚拟站点的固定 ID（独立开关，不占用用户站点位）
+    /// 注意：UUID 仅接受 0-9a-f 十六进制字符
+    static let lbqhSiteID = UUID(uuidString: "0b0c0000-0000-0000-0000-000000000001")!
+
     private(set) var config: AppConfig
     private(set) var snapshots: [UUID: SiteSnapshot] = [:]
     /// 每日用量历史（按站点）：siteID → [日期(yyyy-MM-dd) → 当天用量]
@@ -24,9 +28,11 @@ final class MonitorController {
         refreshNow()
     }
 
-    func refreshNow() {
+    /// forceLBQH == true：此次刷新对联并千行走 POST /api/balance/fetch 立即抓取最新余额
+    /// （手动「立即刷新」触发；定时刷新不传参，走低成本 GET）
+    func refreshNow(forceLBQH: Bool = false) {
         Task { @MainActor [weak self] in
-            await self?.refresh()
+            await self?.refresh(forceLBQH: forceLBQH)
         }
     }
 
@@ -38,7 +44,7 @@ final class MonitorController {
         refreshNow()
     }
 
-    func refresh() async {
+    func refresh(forceLBQH: Bool = false) async {
         guard !isRefreshing else { return }
         isRefreshing = true
         defer { isRefreshing = false }
@@ -74,8 +80,53 @@ final class MonitorController {
                 ConfigStore.saveSnapshots(snapshots)
             }
         }
+        // 联并千行：独立开关，勾选时额外查询余额（作为虚拟站点复用展示/提醒/历史机制）
+        if let lbqh = config.lbqh, lbqh.enabled {
+            await refreshLBQH(lbqh: lbqh, forceFetch: forceLBQH)
+        }
+
         updateDailyUsageHistory()
         onStateChange?()
+    }
+
+    /// 联并千行余额查询（只查余额，元/人民币）。
+    /// forceFetch == true 时走 POST /api/balance/fetch 立即抓取（手动刷新），否则 GET /api/balance 读缓存（定时刷新）。
+    private func refreshLBQH(lbqh: LBQHConfig, forceFetch: Bool = false) async {
+        let id = Self.lbqhSiteID
+        let site = Site(id: id, name: "联并千行", enabled: true,
+                        baseURL: lbqh.baseURL, apiToken: lbqh.apiKey,
+                        provider: .lbqh, lowBalanceThreshold: lbqh.lowBalanceThreshold)
+        do {
+            let result = forceFetch
+                ? try await APIService.fetchLBQH(site, forceUpdate: true)
+                : try await APIService.fetch(site)
+            var snapshot = SiteSnapshot(siteID: id, checkedAt: result.checkedAt,
+                                        day: AppFormatters.day.string(from: result.checkedAt),
+                                        ok: true, balance: result.balance, currency: result.currency,
+                                        usedToday: result.usedToday, usedThisMonth: result.usedThisMonth,
+                                        hardLimit: result.hardLimit, lastError: nil)
+            snapshot.tracking = snapshots[id]?.tracking
+            if let balance = result.balance {
+                var t = snapshot.tracking ?? UsageTracking()
+                UsageTracker.advance(&t, date: result.checkedAt, balance: balance)
+                snapshot.tracking = t
+            }
+            snapshots[id] = snapshot
+            ConfigStore.saveSnapshots(snapshots)
+            evaluateLowBalance(site: site, snapshot: snapshot)
+        } catch {
+            var snap = snapshots[id] ?? SiteSnapshot(siteID: id, checkedAt: Date(),
+                                                     day: AppFormatters.day.string(from: Date()),
+                                                     ok: true, balance: nil, currency: "CNY",
+                                                     usedToday: nil, usedThisMonth: nil,
+                                                     hardLimit: nil, lastError: nil)
+            snap.ok = false
+            snap.lastError = "\(error)"
+            snap.checkedAt = Date()
+            snap.day = AppFormatters.day.string(from: Date())
+            snapshots[id] = snap
+            ConfigStore.saveSnapshots(snapshots)
+        }
     }
 
     /// 每个启用站点把今日用量写入各自的历史（折线图数据源）
@@ -94,6 +145,19 @@ final class MonitorController {
                 }
             }
             dailyUsageHistory[site.id] = h
+        }
+        // 联并千行虚拟站点同样写入历史（复用余额基准用量）
+        if let lbqh = config.lbqh, lbqh.enabled,
+           let snap = snapshots[Self.lbqhSiteID], snap.ok {
+            var h = dailyUsageHistory[Self.lbqhSiteID] ?? [:]
+            h[today] = snap.tracking?.dayUsage ?? 0
+            let keys = h.keys.sorted()
+            if keys.count > 10 {
+                for k in keys.prefix(keys.count - 10) {
+                    h.removeValue(forKey: k)
+                }
+            }
+            dailyUsageHistory[Self.lbqhSiteID] = h
         }
         ConfigStore.saveDailyUsage(dailyUsageHistory)
     }
@@ -114,12 +178,22 @@ final class MonitorController {
             let points = days.map { ($0, h[$0] ?? 0) }
             result.append((site, points))
         }
+        // 联并千行虚拟站点同样加入折线图
+        if let lbqh = config.lbqh, lbqh.enabled {
+            let h = dailyUsageHistory[Self.lbqhSiteID] ?? [:]
+            let points = days.map { ($0, h[$0] ?? 0) }
+            let site = Site(id: Self.lbqhSiteID, name: "联并千行", enabled: true,
+                            baseURL: lbqh.baseURL, apiToken: lbqh.apiKey,
+                            provider: .lbqh, lowBalanceThreshold: lbqh.lowBalanceThreshold)
+            result.append((site, points))
+        }
         return result
     }
 
-    /// 低余额判定（仅 DeepSeek 有余额概念）
+    /// 低余额判定（目前仅 DeepSeek 与联并千行有余额概念）
     private func evaluateLowBalance(site: Site, snapshot: SiteSnapshot) {
-        guard let balance = snapshot.balance, site.provider == .deepseek else { return }
+        guard let balance = snapshot.balance,
+              site.provider == .deepseek || site.provider == .lbqh else { return }
         let threshold = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : config.defaultLowBalanceThreshold
         if balance < threshold {
             NotificationManager.shared.notifyLowBalance(site: site, balance: balance,
@@ -135,11 +209,19 @@ final class MonitorController {
         let bold: [NSAttributedString.Key: Any] = [.font: NSFont.boldSystemFont(ofSize: 13)]
 
         // 警告前缀（⚠ 报错 / ! 低余额），与数据并列显示，不覆盖
-        let anyError = enabledSites.contains(where: { snapshots[$0.id]?.ok == false })
-        let anyLow = enabledSites.contains { site in
+        var anyError = enabledSites.contains(where: { snapshots[$0.id]?.ok == false })
+        var anyLow = enabledSites.contains { site in
             guard let snap = snapshots[site.id], let b = snap.balance else { return false }
             let t = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : config.defaultLowBalanceThreshold
             return b < t
+        }
+        // 联并千行也参与报错/低余额警告
+        if let lbqh = config.lbqh, lbqh.enabled {
+            if snapshots[Self.lbqhSiteID]?.ok == false { anyError = true }
+            if let snap = snapshots[Self.lbqhSiteID], let b = snap.balance {
+                let t = lbqh.lowBalanceThreshold > 0 ? lbqh.lowBalanceThreshold : config.defaultLowBalanceThreshold
+                if b < t { anyLow = true }
+            }
         }
 
         func money(_ v: Double) -> String {
@@ -167,6 +249,11 @@ final class MonitorController {
                 let v = site.provider.usesBalanceTracking ? (snap.tracking?.monthUsage ?? 0) : (snap.usedThisMonth ?? 0)
                 segments.append((tag, " 本月 \(symbol)\(money(v))"))
             }
+        }
+        // 联并千行：独立开关，勾选时按 showInMenuBar 显示余额
+        if let lbqh = config.lbqh, lbqh.enabled, lbqh.showInMenuBar,
+           let snap = snapshots[Self.lbqhSiteID], snap.ok, let b = snap.balance {
+            segments.append(("联", " ¥\(money(b))"))
         }
 
         let result = NSMutableAttributedString()

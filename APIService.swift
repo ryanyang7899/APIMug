@@ -49,6 +49,8 @@ enum APIService {
             return try await fetchStepFun(site)
         case .deepinfra:
             return try await fetchDeepInfra(site)
+        case .lbqh:
+            return try await fetchLBQH(site)
         }
     }
 
@@ -205,11 +207,67 @@ enum APIService {
                           checkedAt: Date())
     }
 
+    // MARK: - 联并千行 MaaS（多用户服务）
+
+    /// 联并千行查询（新版接口，鉴权对齐 DeepSeek 的 Bearer 令牌）：
+    /// - forceUpdate == false：GET {base}/user/balance，DeepSeek 风格，读缓存（无成本）
+    /// - forceUpdate == true ：POST {base}/api/balance/fetch 同步抓一次（登录+验证码，约 10~20 秒，有成本），
+    ///                          再 GET {base}/user/balance 取最新余额（fetch 返回的是内部快照，结构不固定）
+    /// 返回结构 /user/balance 与 DeepSeek 一致：{is_available, balance_infos:[{currency, total_balance, ...}]}
+    static func fetchLBQH(_ site: Site, forceUpdate: Bool = false) async throws -> SiteResult {
+        // 立即刷新：先 POST fetch 触发抓取（同步等待），再用 /user/balance 拿数据
+        if forceUpdate {
+            let fetchURL = try makeURL(base: site.baseURL, path: "api/balance/fetch")
+            var fetchReq = URLRequest(url: fetchURL)
+            fetchReq.httpMethod = "POST"
+            fetchReq.setValue("Bearer \(site.apiToken)", forHTTPHeaderField: "Authorization")
+            fetchReq.timeoutInterval = 60
+            _ = try await getWithHeaders(fetchReq, session: lbqhFetchSession)
+        }
+
+        // 查余额（GET /user/balance）
+        let url = try makeURL(base: site.baseURL, path: "user/balance")
+        var req = URLRequest(url: url)
+        req.setValue("Bearer \(site.apiToken)", forHTTPHeaderField: "Authorization")
+        req.timeoutInterval = 15
+        let data = try await getWithHeaders(req)
+        let resp: DeepSeekBalanceResponse
+        do {
+            resp = try JSONDecoder().decode(DeepSeekBalanceResponse.self, from: data)
+        } catch {
+            throw APIError.decode(error)
+        }
+        // 与 DeepSeek 相同：按币种汇总 total_balance（字段是字符串）
+        var balanceByCurrency: [String: Double] = [:]
+        for info in resp.balanceInfos {
+            if let v = Double(info.totalBalance) {
+                balanceByCurrency[info.currency, default: 0] += v
+            }
+        }
+        let currency = balanceByCurrency.keys.sorted().first ?? "CNY"
+        let balance = balanceByCurrency[currency]
+        return SiteResult(siteID: site.id, balance: balance, currency: currency,
+                          usedToday: nil, usedThisMonth: nil, hardLimit: nil,
+                          checkedAt: Date())
+    }
+
+    /// 立即抓取专用 session：抓取登录+验证码耗时 10~20 秒，需要比默认更宽松的超时
+    private static let lbqhFetchSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        config.timeoutIntervalForRequest = 60
+        config.timeoutIntervalForResource = 120
+        return URLSession(configuration: config)
+    }()
+
     // MARK: - 底层请求
 
     private static func makeURL(base: String, path: String, query: [URLQueryItem] = []) throws -> URL {
         var baseStr = base.trimmingCharacters(in: .whitespacesAndNewlines)
         while baseStr.hasSuffix("/") { baseStr.removeLast() }
+        // 未带 scheme 的地址（如内网 IP "100.66.1.1:8100"）自动补 http://，否则 URLComponents 解析失败报「无效 URL」
+        if !baseStr.contains("://") {
+            baseStr = "http://" + baseStr
+        }
         guard var comps = URLComponents(string: baseStr) else {
             throw APIError.badURL(base)
         }
@@ -223,10 +281,16 @@ enum APIService {
         var req = URLRequest(url: url)
         req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         req.timeoutInterval = 15
+        return try await getWithHeaders(req)
+    }
+
+    /// 发送请求并校验状态码（请求头已由调用方设好，含 lbqh 的 X-API-Key）。
+    /// 可传入自定义 session（如 lbqh 立即抓取的长超时 session）。
+    private static func getWithHeaders(_ req: URLRequest, session s: URLSession = session) async throws -> Data {
         let data: Data
         let resp: URLResponse
         do {
-            (data, resp) = try await session.data(for: req)
+            (data, resp) = try await s.data(for: req)
         } catch {
             throw APIError.network(error)
         }

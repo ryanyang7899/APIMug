@@ -21,6 +21,8 @@ build/APIMug.app/Contents/MacOS/APIMug --sim                            # 余额
 build/APIMug.app/Contents/MacOS/APIMug --update [版本号]                 # 更新检查
 build/APIMug.app/Contents/MacOS/APIMug --loginitem status|on|off        # 开机自启动
 build/APIMug.app/Contents/MacOS/APIMug --charttest                      # 渲染折线图到 /tmp/chart.png
+build/APIMug.app/Contents/MacOS/APIMug --configtest                     # 配置加载/迁移自测
+build/APIMug.app/Contents/MacOS/APIMug --lbqhtest [baseURL] [令牌] [--force]  # 联并千行余额刷新链路自测
 build/APIMug.app/Contents/MacOS/APIMug --measure                        # 测量菜单宽度（校准折线图）
 ```
 
@@ -44,6 +46,7 @@ build/APIMug.app/Contents/MacOS/APIMug --measure                        # 测量
 
 - **6 种协议全部走同一 `SiteResult` 模型**：`balance`+`currency` / `usedToday` / `usedThisMonth` / `hardLimit`。新增平台 = 加 `ProviderType` 枚举 + `displayName`/`defaultBaseURL`/`usesBalanceTracking`/`displayCurrency` + APIService 一个 fetch 函数 + 设置下拉（自动用 `allCases`）+ 菜单行分支。
 - **两套用量来源**：余额型平台（deepseek/kimi/stepfun/deepinfra）用 `UsageTracker` 余额差值累加推算本日/本月；newapi/openrouter 直接用 API 返回的 usage。`ProviderType.usesBalanceTracking` 决定走哪套。
+- **联并千行（lbqh）是独立开关**：不是真实站点，勾选时由 MonitorController.refreshLBQH() 用固定虚拟 ID（`MonitorController.lbqhSiteID`）查询并存 snapshot，复用站点的展示/低余额提醒/折线图/用量追踪。配置在 `AppConfig.lbqh`（`LBQHConfig`）。接口走 `GET {base}/user/balance`（DeepSeek 风格，`Authorization: Bearer <令牌>`），手动立即刷新额外触发 `POST /api/balance/fetch`（`APIService.fetchLBQH(forceUpdate:)`）。
 - **持久化**：全部 UserDefaults，经 `ConfigStore`。bundle id 是 `com.alfye.NewAPIMonitor`（沿袭原版应用，保证配置延续）。注意：经 `open` 启动时 defaults 域=bundle id；直接跑二进制时=进程名，CLI 自测读写不到 GUI 的配置。
 - **菜单弹窗**：`rebuildMenu(force:)`。**菜单 tracking 期间绝不能修改菜单结构（会崩）**——`menuIsOpen` + `NSMenuDelegate.menuWillOpen` 强制下次打开前重建；tracking 中只更新状态栏标题。任何 `onStateChange` 触发的刷新都要走这个守卫。
 - **菜单宽度**：折线图宽度 = `menuChartWidth()`（测量最宽文字行 + 40 内边距），保证图与弹窗同宽居中。

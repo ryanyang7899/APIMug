@@ -3,9 +3,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-# 参数：--no-launch 跳过启动；[版本号] 覆盖 CFBundleShortVersionString（默认 1.1.2）
+# 参数：--no-launch 跳过启动；[版本号] 覆盖 CFBundleShortVersionString（默认 1.2.1）
 NO_LAUNCH=0
-VERSION="1.1.2"
+VERSION="1.2.1"
 for arg in "$@"; do
   case "$arg" in
     --no-launch) NO_LAUNCH=1 ;;
@@ -47,6 +47,11 @@ cat > "$BUNDLE/Contents/Info.plist" <<PLIST
   <key>LSUIElement</key><true/>
   <key>NSHighResolutionCapable</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
+  <!-- 放行明文 HTTP：连接内网/局域网服务（如联并千行 http://100.66.1.1:8100）时 ATS 会拦截，需豁免 -->
+  <key>NSAppTransportSecurity</key>
+  <dict>
+    <key>NSAllowsArbitraryLoads</key><true/>
+  </dict>
 </dict>
 </plist>
 PLIST

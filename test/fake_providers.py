@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""本地假服务器：模拟 OpenRouter / Kimi / StepFun / DeepInfra 的余额接口（离线自测用）。"""
+"""本地假服务器：模拟 OpenRouter / Kimi / StepFun / DeepInfra / 联并千行 的余额接口（离线自测用）。"""
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import json
 import sys
@@ -7,9 +7,49 @@ import sys
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8788
 
 class Handler(BaseHTTPRequestHandler):
+    def do_POST(self):
+        # 联并千行: POST {base}/api/balance/fetch（立即抓取，Bearer 令牌鉴权，模拟余额下降）
+        if self.path.startswith('/api/balance/fetch'):
+            auth = self.headers.get('Authorization', '')
+            if auth != 'Bearer lbqh-2026-token':
+                self.send_response(401)
+                self.end_headers()
+                return
+            body = json.dumps({
+                "id": 9, "fetched_at": "2026-08-24T09:32:36Z",
+                "balance": 970.0, "total_spent": 30.0, "month_spent": 29.35
+            }).encode()
+            self.send_response(200)
+            self.send_header('Content-Type', 'application/json')
+            self.send_header('Content-Length', str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        self.send_response(404)
+        self.end_headers()
+
     def do_GET(self):
         body = None
-        if self.path.startswith('/api/v1/key'):
+        if self.path.startswith('/user/balance'):
+            # 联并千行: GET {base}/user/balance（新版，Bearer 令牌鉴权，DeepSeek 风格）
+            auth = self.headers.get('Authorization', '')
+            if auth != 'Bearer lbqh-2026-token':
+                self.send_response(401)
+                self.end_headers()
+                return
+            body = json.dumps({
+                "is_available": True,
+                "balance_infos": [
+                    {"currency": "CNY", "total_balance": "999.35",
+                     "granted_balance": "0", "topped_up_balance": "0"}
+                ]
+            }).encode()
+        elif self.path.startswith('/api/balance'):
+            # 旧版内部接口已废弃，一律 401（用于验证兼容路径）
+            self.send_response(401)
+            self.end_headers()
+            return
+        elif self.path.startswith('/api/v1/key'):
             # OpenRouter: GET /api/v1/key
             body = json.dumps({"data": {
                 "label": "test-key", "limit": 100.0, "limit_remaining": 42.5,

@@ -40,6 +40,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         if args.count >= 2, args[1] == "--configtest" {
             CLI.runConfigTest()         // 配置加载/迁移自测
         }
+        if args.count >= 2, args[1] == "--lbqhtest" {
+            CLI.runLBQHTest()           // 联并千行余额刷新链路自测
+        }
         let app = NSApplication.shared
         app.setActivationPolicy(.accessory)   // 无 Dock 图标、不出现在 Cmd+Tab
         let delegate = AppDelegate()          // app.delegate 是弱引用，需强持有
@@ -176,7 +179,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// 站点行（每站点两行：平台+余额 / 本日·本月·更新时间）
     private func addSiteRows(to menu: NSMenu) {
         let enabledSites = controller.config.sites.filter { $0.enabled }
-        if enabledSites.isEmpty {
+        let lbqhEnabled = controller.config.lbqh?.enabled ?? false
+        if enabledSites.isEmpty && !lbqhEnabled {
             let empty = NSMenuItem(title: "未启用任何站点，请在设置中添加", action: nil, keyEquivalent: "")
             empty.isEnabled = false
             menu.addItem(empty)
@@ -188,6 +192,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 menu.addItem(item)
             }
         }
+        // 联并千行虚拟站点行（独立开关启用时显示）
+        if lbqhEnabled, let lbqh = controller.config.lbqh {
+            let lbqhItem = NSMenuItem(title: "", action: nil, keyEquivalent: "")
+            lbqhItem.isEnabled = false
+            lbqhItem.attributedTitle = lbqhRowAttributedTitle(lbqh: lbqh)
+            menu.addItem(lbqhItem)
+        }
+    }
+
+    /// 联并千行行：两行（余额 / 更新时间），与站点行一致
+    private func lbqhRowAttributedTitle(lbqh: LBQHConfig) -> NSAttributedString {
+        guard let snap = controller.snapshots[MonitorController.lbqhSiteID] else {
+            return twoLine("○ 联并千行", "尚未检查")
+        }
+        let mark = snap.ok ? "✓" : "✕"
+        let time = AppFormatters.time.string(from: snap.checkedAt)
+        if let err = snap.lastError {
+            return twoLine("\(mark) 联并千行 — 错误", "\(err) · 更新 \(time)")
+        }
+        if let b = snap.balance {
+            return twoLine("\(mark) 联并千行 — 余额 ¥\(fmt("%.2f", b))", "更新 \(time)")
+        }
+        return twoLine("\(mark) 联并千行 — 余额 ¥0.00", "更新 \(time)")
     }
 
     /// 版本 / 更新 / 操作区（底部固定项）
@@ -245,6 +272,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let t = site.lowBalanceThreshold > 0 ? site.lowBalanceThreshold : controller.config.defaultLowBalanceThreshold
                     if b < t { lowCount += 1 }
                 }
+            }
+        }
+        // 联并千行参与统计
+        if let lbqh = controller.config.lbqh, lbqh.enabled,
+           let snap = controller.snapshots[MonitorController.lbqhSiteID] {
+            if !snap.ok {
+                errCount += 1
+            } else if let b = snap.balance {
+                let t = lbqh.lowBalanceThreshold > 0 ? lbqh.lowBalanceThreshold : controller.config.defaultLowBalanceThreshold
+                if b < t { lowCount += 1 }
             }
         }
         let status: String
@@ -321,7 +358,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - 动作
 
     @objc private func refreshNow(_ sender: Any?) {
-        controller.refreshNow()
+        // 手动「立即刷新」：联并千行同时 POST /api/balance/fetch 立即抓取最新余额
+        controller.refreshNow(forceLBQH: true)
     }
 
     @objc private func openSettings(_ sender: Any?) {
@@ -522,6 +560,39 @@ enum CLI {
         }
         try? png.write(to: URL(fileURLWithPath: "/tmp/chart.png"))
         print("已导出 /tmp/chart.png")
+        exit(0)
+    }
+
+    /// 联并千行余额刷新链路自测：--lbqhtest [baseURL] [apiKey] [--force]
+    /// 用假服务器/真实服务验证「refresh → snapshot → 聚合标题」全链路（不污染真实配置）。
+    /// 传 --force 时走 POST /api/balance/fetch 立即抓取分支（对应手动「立即刷新」）。
+    static func runLBQHTest() -> Never {
+        let args = CommandLine.arguments
+        let force = args.contains("--force")
+        let base = args.count >= 3 ? args[2] : LBQHConfig.defaultBaseURL
+        let key = args.count >= 4 ? args[3] : LBQHConfig.defaultAPIKey
+        var config = AppConfig(sites: [], refreshIntervalMinutes: 30,
+                               defaultLowBalanceThreshold: 50)
+        config.lbqh = LBQHConfig(enabled: true, baseURL: base, apiKey: key,
+                                 showInMenuBar: true, lowBalanceThreshold: 0)
+        let sem = DispatchSemaphore(value: 0)
+        Task.detached {
+            let mc = MonitorController(config: config)
+            mc.onStateChange = {
+                if let snap = mc.snapshots[MonitorController.lbqhSiteID] {
+                    print("snapshot ok=\(snap.ok) balance=\(snap.balance ?? -1) currency=\(snap.currency ?? "nil")")
+                    print("tracking dayUsage=\(snap.tracking?.dayUsage ?? -1)")
+                } else {
+                    print("snapshot: nil（未查到）")
+                }
+                print("aggregateShortTitle: \(mc.aggregateShortTitle().string)")
+            }
+            // 直接 await refresh()：不走 refreshNow() 的 @MainActor 跳转，
+            // 避免无头自测无主 RunLoop 导致死锁（refresh() 本身非 MainActor 隔离）
+            await mc.refresh(forceLBQH: force)
+            sem.signal()
+        }
+        sem.wait()
         exit(0)
     }
 

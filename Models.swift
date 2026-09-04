@@ -14,6 +14,8 @@ enum ProviderType: String, Codable, CaseIterable {
     case stepfun = "stepfun"
     /// DeepInfra：GET {base}/payment/checklist
     case deepinfra = "deepinfra"
+    /// 联并千行 MaaS：GET {base}/api/balance（本地监控服务）
+    case lbqh = "lbqh"
 
     /// 设置界面显示名
     var displayName: String {
@@ -24,6 +26,7 @@ enum ProviderType: String, Codable, CaseIterable {
         case .kimi: return "Kimi（月之暗面）"
         case .stepfun: return "阶跃星辰 StepFun"
         case .deepinfra: return "DeepInfra"
+        case .lbqh: return "联并千行 MaaS"
         }
     }
 
@@ -36,6 +39,7 @@ enum ProviderType: String, Codable, CaseIterable {
         case .kimi: return "https://api.moonshot.cn"
         case .stepfun: return "https://api.stepfun.com"
         case .deepinfra: return "https://api.deepinfra.com"
+        case .lbqh: return "http://localhost:8100"
         }
     }
 
@@ -44,6 +48,7 @@ enum ProviderType: String, Codable, CaseIterable {
         switch self {
         case .deepseek, .kimi, .stepfun, .deepinfra: return true
         case .newapi, .openrouter: return false   // 这两种平台 API 直接返回用量
+        case .lbqh: return true                    // 联并千行只查余额，走余额基准法
         }
     }
 
@@ -52,6 +57,7 @@ enum ProviderType: String, Codable, CaseIterable {
         switch self {
         case .deepseek, .kimi, .stepfun: return "CNY"
         case .newapi, .openrouter, .deepinfra: return "USD"
+        case .lbqh: return "CNY"
         }
     }
 }
@@ -81,10 +87,29 @@ struct AppConfig: Codable {
     var defaultLowBalanceThreshold: Double
     /// 更新检查频率（nil = 每次启动）
     var updateCheckFrequency: UpdateFrequency?
+    /// 联并千行 MaaS 监控配置（nil = 未启用；独立开关，不占用站点位）
+    var lbqh: LBQHConfig?
     // —— 以下为已废弃的全局菜单栏显示开关，仅用于迁移到各站点后清空 ——
     var showBalanceInMenuBar: Bool?
     var showTodayUsageInMenuBar: Bool?
     var showMonthUsageInMenuBar: Bool?
+}
+
+/// 联并千行 MaaS 余额监控配置（独立开关，非站点协议）
+struct LBQHConfig: Codable {
+    /// 是否监控联并千行余额
+    var enabled: Bool
+    /// 监控服务地址（默认 http://localhost:8100）
+    var baseURL: String
+    /// API 令牌（在服务网页端「API 令牌」页创建，格式 lbqh-<32位hex>，走 Authorization: Bearer 头）
+    var apiKey: String
+    /// 菜单栏是否显示该余额（聚合标题带首字符「联」）
+    var showInMenuBar: Bool
+    /// 低余额阈值；0 表示使用全局默认值
+    var lowBalanceThreshold: Double
+
+    static let defaultBaseURL = "http://localhost:8100"
+    static let defaultAPIKey = ""   // 令牌由用户在服务网页端创建，无法预置默认值
 }
 
 /// 某站点最近一次检查的结果（持久化，供菜单与聚合显示）
@@ -279,7 +304,6 @@ struct DeepInfraChecklist: Decodable {
         case suspended
     }
 }
-
 // MARK: - 格式化工具
 
 enum AppFormatters {

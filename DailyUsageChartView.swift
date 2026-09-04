@@ -10,6 +10,7 @@ extension ProviderType {
         case .deepinfra:  return .systemTeal
         case .openrouter: return .systemPink
         case .newapi:     return .systemGray
+        case .lbqh:       return .systemBrown
         }
     }
 }
