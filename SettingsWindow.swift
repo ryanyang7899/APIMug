@@ -242,6 +242,25 @@ final class SettingsWindowController: NSObject {
         updateStatusLabel.font = NSFont.systemFont(ofSize: 11)
         updateStatusLabel.translatesAutoresizingMaskIntoConstraints = false
         stack.addArrangedSubview(updateStatusLabel)
+        stack.addArrangedSubview(makeSeparator())
+
+        // —— 关于 / License ——
+        stack.addArrangedSubview(makeSectionLabel("关于"))
+        let aboutVersion = makeLabel(width: 110)
+        aboutVersion.stringValue = "版本"
+        let aboutVersionValue = makeLabel(width: 100)
+        aboutVersionValue.stringValue = "v\(Updater.installedVersion())"
+        aboutVersionValue.font = NSFont.monospacedDigitSystemFont(ofSize: 12, weight: .regular)
+        stack.addArrangedSubview(row(with: [aboutVersion, aboutVersionValue]))
+
+        let aboutLicense = makeLabel(width: 110)
+        aboutLicense.stringValue = "License"
+        let licenseText = NSTextField(labelWithString: "MIT License — Copyright (c) 2026 ryanyang7899")
+        licenseText.textColor = .secondaryLabelColor
+        licenseText.font = NSFont.systemFont(ofSize: 11)
+        licenseText.lineBreakMode = .byTruncatingTail
+        licenseText.translatesAutoresizingMaskIntoConstraints = false
+        stack.addArrangedSubview(row(with: [aboutLicense, licenseText]))
         // 底部按钮已固定在窗口底部栏，不在此处
     }
 

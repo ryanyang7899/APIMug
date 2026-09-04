@@ -1,5 +1,7 @@
 # API Mug — macOS 菜单栏 API 余额/用量监测
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 原生 **Swift + AppKit** 写的 macOS 菜单栏应用：**无 Dock 图标、纯代码 UI、无 Xcode**。常驻菜单栏，实时监测多个 API 平台（DeepSeek、NewAPI/中转站、OpenRouter、Kimi、StepFun、DeepInfra、**联并千行 MaaS**）的余额与用量，余额低时通知提醒。
 
 它也是一个「**联并千行 MaaS（LBQH）客户端**」：配合自托管的 [lbqh-monitor](https://github.com/ryanyang7899/lbqh-monitor) 服务端，就能在 macOS 菜单栏随时查看联并千行平台的余额，无需打开网页。
@@ -203,3 +205,33 @@ docker compose up -d --build   # 构建并启动（首次构建较慢，镜像�
 - 包 ID：`com.alfye.NewAPIMonitor`，配置存于 `~/Library/Preferences/com.alfye.NewAPIMonitor.plist`（改名不影响既有配置）
 - 首次启动会尝试从旧版应用的 `site1_*` 配置迁移
 - Apple Silicon 必须 ad-hoc 签名，build.sh 已处理
+
+## License
+
+本项目以 **MIT License** 开源。
+
+```
+MIT License
+
+Copyright (c) 2026 ryanyang7899
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
+
+完整文本见 [LICENSE](LICENSE) 文件。
