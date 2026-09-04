@@ -75,3 +75,7 @@ build/APIMug.app/Contents/MacOS/APIMug --test deepseek https://api.deepseek.com 
 python3 test/fake_newapi.py 8787   # 本地模拟 NewAPI 接口
 ```
 
+## 相关项目
+
+- [**lbqh-monitor**](https://github.com/ryanyang7899/lbqh-monitor) — 联并千行MaaS 平台的多用户余额/消费监控**服务端**。它实现了 DeepSeek 风格的 `GET /user/balance`（`Authorization: Bearer <token>`），与本应用的 `deepseek` 协议完全对齐：在 APIMug 新增一个 `deepseek` 站点，Base 填该服务地址、Token 填你在该平台「API 令牌」页生成的令牌，即可用菜单栏实时监测联并千行MaaS 平台的余额。
+
